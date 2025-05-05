@@ -1,6 +1,9 @@
 // swift-tools-version:5.10
 import PackageDescription
 
+let wasiPlatform: [Platform] = [.wasi]
+let nonWASIPlatforms: [Platform] = [.macOS, .macCatalyst, .iOS, .tvOS, .watchOS, .visionOS, .driverKit, .linux, .windows, .android, .openbsd]
+
 let package = Package(
     name: "sqlite-nio",
     platforms: [
@@ -13,7 +16,11 @@ let package = Package(
         .library(name: "SQLiteNIO", targets: ["SQLiteNIO"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-nio.git", from: "2.65.0"),
+        // TODO: SM: Merge all dependencies and wait for proper versions before merging here
+        // Or alternatively, this can stay as a minimum as long as the upper-most dependencies have proper minimum dependencies.
+        // Or I can put in alternative minimum versions for wasm.
+        .package(url: "https://github.com/PassiveLogic/swift-nio.git", branch: "feat/swift-wasm-support"),
+        // .package(url: "https://github.com/apple/swift-nio.git", from: "2.65.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.5.4"),
     ],
     targets: [
@@ -38,7 +45,10 @@ let package = Package(
                 .target(name: "CSQLite"),
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "NIOCore", package: "swift-nio"),
-                .product(name: "NIOPosix", package: "swift-nio"),
+                // SM: NOW: Revert once I'm ready to push branches to github etc.
+                .product(name: "NIOAsyncIO", package: "swift-nio"),
+//                .product(name: "NIOAsyncIO", package: "swift-nio", condition: .when(platforms: wasiPlatform)),
+//                .product(name: "NIOPosix", package: "swift-nio", condition: .when(platforms: nonWASIPlatforms)),
                 .product(name: "NIOFoundationCompat", package: "swift-nio"),
             ],
             swiftSettings: swiftSettings

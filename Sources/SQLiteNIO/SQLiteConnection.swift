@@ -1,5 +1,9 @@
 import NIOCore
+#if canImport(NIOAsyncIO)
+import NIOAsyncIO
+#elseif canImport(NIOPosix)
 import NIOPosix
+#endif
 import CSQLite
 import Logging
 
@@ -130,11 +134,14 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
         logger: Logger,
         eventLoop: any EventLoop
     ) throws -> SQLiteConnection {
+        print("SM: connect SQLiteConnection A, storage=\(storage)")
         let path: String
         switch storage {
         case .memory: path = ":memory:"
         case .file(let file): path = file
         }
+
+        print("SM: connect SQLiteConnection B, path=\(path)")
 
         var handle: OpaquePointer?
         let openOptions = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX | SQLITE_OPEN_URI | SQLITE_OPEN_EXRESCODE
@@ -218,6 +225,53 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
         logger: Logger,
         _ onRow: @escaping @Sendable (SQLiteRow) -> Void
     ) -> EventLoopFuture<Void> {
+        #if canImport(NIOAsyncIO) // TODO: SM: Undo hack here (requires adjustments to NIOAsyncIO)
+
+        let promise = self.eventLoop.makePromise(of: Void.self)
+        // print("SM: 🦄🔵")
+        // print("SM: A")
+
+        self.threadPool.submit(on: self.eventLoop) {
+            // print("SM: B")
+            // TODO: SM: Feed WorkItemState into closure. And add a .active computed var to WorkItemState, or something like that to
+            // support the existing API surface.
+
+//            guard case $0 = NIOThreadPool.WorkItemState.active else {
+//                // Note: We should be throwing NIOThreadPoolError.ThreadPoolInactive here, but we can't
+//                // 'cause its initializer isn't public so we let `SQLITE_MISUSE` get the point across.
+//                return promise.fail(SQLiteError(reason: .misuse, message: "Thread pool is inactive"))
+//            }
+            var futures: [EventLoopFuture<Void>] = []
+            do {
+                // print("SM: B.1")
+                var statement = try SQLiteStatement(query: query, on: self)
+                // print("SM: B.2")
+                let columns = try statement.columns()
+                // print("SM: B.3")
+                try statement.bind(binds)
+                // print("SM: B.4")
+                while let row = try statement.nextRow(for: columns) {
+                    // print("SM: B.5.loop")
+                    // print("SM: 🟣🔵")
+                    futures.append(promise.futureResult.eventLoop.submit {
+                        // print("SM: B.6.1")
+                        onRow(row)
+                        // print("SM: B.6.2")
+                        // print("SM: 🟣🟢")
+                    })
+                }
+            } catch {
+                return promise.fail(error) // EventLoopPromise.fail(_:), conveniently, returns Void
+            }
+            // print("SM: C")
+            // print("SM: 🦄🟢")
+            EventLoopFuture.andAllSucceed(futures, promise: promise)
+        }
+
+        return promise.futureResult
+        #else
+
+        // TODO: SM: Figure out correct receiving API so that following code also compiles
         let promise = self.eventLoop.makePromise(of: Void.self)
         self.threadPool.submit {
             guard case $0 = NIOThreadPool.WorkItemState.active else {
@@ -239,6 +293,7 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
             EventLoopFuture.andAllSucceed(futures, promise: promise)
         }
         return promise.futureResult
+        #endif
     }
 
     /// Close the connection and invalidate its handle.

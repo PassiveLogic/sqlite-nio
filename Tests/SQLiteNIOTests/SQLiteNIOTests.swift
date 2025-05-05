@@ -1,8 +1,6 @@
 import XCTest
 import SQLiteNIO
 import Logging
-import NIOCore
-import NIOPosix
 import NIOFoundationCompat
 
 /// Run the provided closure with an opened ``SQLiteConnection`` using an in-memory database and the singleton thread
@@ -26,6 +24,8 @@ func withOpenedConnection<T>(
 
 final class SQLiteNIOTests: XCTestCase {
     func testBasicConnection() async throws {
+        // TODO: SM: For NIOAsyncIO refinements, there is logging code around here in thirdparty/sqlite-nio that
+        // logs the async process tested here.
         try await withOpenedConnection { conn in
             let rows = try await conn.query("SELECT sqlite_version()")
 
