@@ -1,11 +1,17 @@
 import NIOConcurrencyHelpers
 import NIOCore
-#if canImport(NIOAsyncRuntime)
+// Prefer NIOPosix where available (macOS / Linux). NIOPosix is unavailable on
+// WASI; fall back to NIOAsyncRuntime there. Note that `canImport(NIOAsyncRuntime)`
+// alone is not a correct gate: NIOAsyncRuntime may be importable on macOS/Linux
+// as a transitive dep, but its `AsyncEventLoopGroup` requires macOS 15+, which
+// breaks builds whose deployment target is older.
+#if canImport(NIOPosix)
+import NIOPosix
+#else
 import NIOAsyncRuntime
 typealias MultiThreadedEventLoopGroup = AsyncEventLoopGroup
 public typealias NIOThreadPool = AsyncThreadPool
 #endif
-import NIOPosix
 import CSQLite
 import Logging
 
