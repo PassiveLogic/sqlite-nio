@@ -1,11 +1,22 @@
 import NIOConcurrencyHelpers
 import NIOCore
-#if canImport(NIOAsyncRuntime)
+// Use NIOPosix on every host platform that supports it (macOS, Linux, etc.)
+// and substitute NIOAsyncRuntime on WASI, where NIOPosix's `Posix*`
+// primitives can't compile. Static `os(WASI)` is the right gate here:
+//   - `canImport(NIOAsyncRuntime)` is too greedy: NIOAsyncRuntime may sit in
+//     the dep graph on macOS / Linux too, but its `AsyncEventLoopGroup` is
+//     `@available(macOS 15, *)` and breaks consumers with older deployment
+//     targets (e.g. sqlite-nio's `.macOS(.v10_15)`).
+//   - `canImport(NIOPosix)` is too greedy in the other direction: NIOPosix
+//     resolves on WASI as a partial module (no `MultiThreadedEventLoopGroup`
+//     / `NIOThreadPool`), so the imports below would link-fail.
+#if os(WASI)
 import NIOAsyncRuntime
 typealias MultiThreadedEventLoopGroup = AsyncEventLoopGroup
 public typealias NIOThreadPool = AsyncThreadPool
-#endif
+#else
 import NIOPosix
+#endif
 import CSQLite
 import Logging
 
