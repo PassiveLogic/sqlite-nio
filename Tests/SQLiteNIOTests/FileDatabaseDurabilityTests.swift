@@ -1,6 +1,5 @@
 import XCTest
 import SQLiteNIO
-import CSQLite
 import Foundation
 
 // MARK: - Helpers
@@ -47,32 +46,6 @@ private func exec(_ conn: SQLiteConnection, _ sql: String, _ binds: [SQLiteData]
 /// Read the integer in the named column of the first row.
 private func scalarInt(_ rows: [SQLiteRow], column: String) -> SQLiteInt64? {
     rows.first?.column(column)?.integer
-}
-
-// MARK: - VFS registration (native behavior)
-
-/// These run on the native (non-WASI) build, where the OPFS host imports do not exist.
-/// They lock in the cross-platform contract so CI catches a regression where the VFS is
-/// accidentally registered off-target, the umbrella header stops exposing the entry points,
-/// or the `sqlite_nio_`-prefix discipline breaks and the symbols fail to resolve.
-///
-/// True OPFS durability can only be proven in a browser; that is covered by the separate
-/// SwiftWasm proof-of-concept, not by this native suite.
-final class OPFSVFSRegistrationTests: XCTestCase {
-    func testRegisterIsANoOpSuccessOnNative() {
-        XCTAssertEqual(sqlite_nio_opfs_register_vfs(), SQLITE_OK)
-    }
-
-    func testOPFSIsUnavailableOnNative() {
-        XCTAssertEqual(sqlite_nio_opfs_is_available(), 0)
-    }
-
-    func testOPFSVFSIsNotRegisteredOnNative() {
-        // Even after a registration attempt, no VFS named "opfs" should exist off-WASI.
-        XCTAssertEqual(sqlite_nio_opfs_register_vfs(), SQLITE_OK)
-        let found = "opfs".withCString { sqlite_nio_sqlite3_vfs_find($0) }
-        XCTAssertNil(found, "The OPFS VFS must never be registered on non-WASI platforms")
-    }
 }
 
 // MARK: - .file(path:) durability

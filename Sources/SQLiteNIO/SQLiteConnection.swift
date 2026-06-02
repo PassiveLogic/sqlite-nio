@@ -198,14 +198,6 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
 
         var handle: OpaquePointer?
         let openOptions = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX | SQLITE_OPEN_URI | SQLITE_OPEN_EXRESCODE
-        #if os(WASI)
-        // In the browser, register an OPFS-backed VFS as the default so `.file(path:)`
-        // storage survives reloads. If OPFS is unavailable the open still succeeds
-        // against the default in-wasm VFS, but that storage is ephemeral.
-        if sqlite_nio_opfs_register_vfs() != SQLITE_OK {
-            logger.warning("OPFS unavailable; using ephemeral in-WASM storage", metadata: ["path": .string(path)])
-        }
-        #endif
         let openRet = sqlite_nio_sqlite3_open_v2(path, &handle, openOptions, nil)
         guard openRet == SQLITE_OK else {
             throw SQLiteError(reason: .init(statusCode: openRet), message: "Failed to open to SQLite database at \(path)")
