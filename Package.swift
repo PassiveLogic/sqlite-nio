@@ -56,6 +56,7 @@ let package = Package(
             name: "SQLiteNIOTests",
             dependencies: [
                 .target(name: "SQLiteNIO"),
+                .target(name: "CSQLite"),
             ],
             swiftSettings: swiftSettings
         ),
