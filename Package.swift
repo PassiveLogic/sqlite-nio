@@ -44,12 +44,13 @@ let package = Package(
             dependencies: [
                 .target(name: "CSQLite"),
                 .product(name: "Logging", package: "swift-log"),
-                .product(name: "NIOCore", package: "swift-nio"),
-                .product(name: "NIOAsyncRuntime", package: "swift-nio", condition: .when(platforms: wasiPlatform)),
-                // NIOPosix carries a resource bundle whose generated accessor imports Foundation,
-                // which is unavailable on the embedded WASI target; use NIOAsyncRuntime there instead.
+                // The SwiftNIO stack is elided on WASI (normal + Embedded); .when(platforms:) is
+                // target-evaluated, so these aren't built when cross-compiling to wasm32-unknown-wasip1.
+                // The WASI path is a NIO-free, Swift-Concurrency driver over CSQLite, gated in source
+                // with `#if os(WASI)`.
+                .product(name: "NIOCore", package: "swift-nio", condition: .when(platforms: nonWASIPlatforms)),
                 .product(name: "NIOPosix", package: "swift-nio", condition: .when(platforms: nonWASIPlatforms)),
-                .product(name: "NIOFoundationCompat", package: "swift-nio"),
+                .product(name: "NIOFoundationCompat", package: "swift-nio", condition: .when(platforms: nonWASIPlatforms)),
             ],
             swiftSettings: swiftSettings
         ),
