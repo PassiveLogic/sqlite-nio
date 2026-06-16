@@ -1,3 +1,4 @@
+#if !os(WASI)  // EMBEDDED-WASI: NIO-based connection; the WASI build uses SQLiteConnection+WASI.swift
 import Foundation
 import NIOConcurrencyHelpers
 import NIOCore
@@ -865,3 +866,5 @@ extension SQLiteConnection {
         self.observerBuckets.withLockedValue { $0 = .init() }
     }
 }
+
+#endif  // !os(WASI)
