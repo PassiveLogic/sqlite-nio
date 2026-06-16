@@ -19,10 +19,9 @@ let package = Package(
         .library(name: "SQLiteNIO", targets: ["SQLiteNIO"]),
     ],
     dependencies: [
-        // TODO: SM: Update swift-nio version once NIOAsyncRuntime is available from swift-nio
-        // .package(url: "https://github.com/apple/swift-nio.git", from: "2.89.0"),
-        .package(url: "https://github.com/PassiveLogic/swift-nio.git", branch: "feat/khasmPAL-2026"),
-        .package(url: "https://github.com/apple/swift-log.git", from: "1.5.4"),
+        // Local clones for the embedded-wasm port (see /Users/scottm/git/c34/EMBEDDED_WASM_NOTES.md)
+        .package(path: "../swift-nio"),
+        .package(path: "../swift-log"),
     ],
     targets: [
         .plugin(
@@ -47,7 +46,9 @@ let package = Package(
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOAsyncRuntime", package: "swift-nio", condition: .when(platforms: wasiPlatform)),
-                .product(name: "NIOPosix", package: "swift-nio"),
+                // NIOPosix carries a resource bundle whose generated accessor imports Foundation,
+                // which is unavailable on the embedded WASI target; use NIOAsyncRuntime there instead.
+                .product(name: "NIOPosix", package: "swift-nio", condition: .when(platforms: nonWASIPlatforms)),
                 .product(name: "NIOFoundationCompat", package: "swift-nio"),
             ],
             swiftSettings: swiftSettings
