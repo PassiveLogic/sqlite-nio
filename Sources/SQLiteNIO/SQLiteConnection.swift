@@ -1,4 +1,4 @@
-#if !os(WASI)  // EMBEDDED-WASI: NIO-based connection; the WASI build uses SQLiteConnection+WASI.swift
+#if !hasFeature(Embedded)  // EMBEDDED: NIO-based connection; the Embedded build uses SQLiteConnection+WASI.swift
 import NIOConcurrencyHelpers
 import NIOCore
 // Use NIOPosix on every host platform that supports it (macOS, Linux, etc.)
@@ -459,4 +459,4 @@ extension SQLiteConnection {
 	}
 }
 
-#endif  // !os(WASI)
+#endif  // !hasFeature(Embedded)

@@ -1,4 +1,4 @@
-#if os(WASI)
+#if hasFeature(Embedded)
 import CSQLite
 import Logging
 
@@ -145,4 +145,4 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
         assert(self.handle.raw == nil, "SQLiteConnection was not closed before deinitializing")
     }
 }
-#endif  // os(WASI)
+#endif  // hasFeature(Embedded)

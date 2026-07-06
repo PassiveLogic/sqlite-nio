@@ -1,4 +1,4 @@
-#if !os(WASI)  // EMBEDDED-WASI: NIO/EventLoopFuture protocol; WASI uses the async protocol below
+#if !hasFeature(Embedded)  // EMBEDDED-WASI: NIO/EventLoopFuture protocol; WASI uses the async protocol below
 import NIOCore
 import CSQLite
 import Logging
@@ -197,9 +197,9 @@ private struct SQLiteDatabaseCustomLogger<D: SQLiteDatabase>: SQLiteDatabase {
     }
 }
 
-#endif  // !os(WASI)
+#endif  // !hasFeature(Embedded)
 
-#if os(WASI)
+#if hasFeature(Embedded)
 import CSQLite
 import Logging
 
@@ -263,4 +263,4 @@ private struct SQLiteDatabaseCustomLogger<D: SQLiteDatabase>: SQLiteDatabase {
         Self(database: self.database, logger: logger)
     }
 }
-#endif  // os(WASI)
+#endif  // hasFeature(Embedded)

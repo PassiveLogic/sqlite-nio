@@ -300,7 +300,7 @@ public final class SQLiteCustomFunction: Hashable {
         case .text(let string):
             sqlite_nio_sqlite3_result_text(sqliteContext, string, -1, SQLITE_TRANSIENT)
         case .blob(let value):
-            #if os(WASI)
+            #if hasFeature(Embedded)
             value.withUnsafeBytes { pointer in
                 sqlite_nio_sqlite3_result_blob(sqliteContext, pointer.baseAddress, Int32(value.count), SQLITE_TRANSIENT)
             }

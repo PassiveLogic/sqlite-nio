@@ -1,4 +1,5 @@
 // swift-tools-version:5.10
+import class Foundation.ProcessInfo
 import PackageDescription
 
 /// This list matches the [supported platforms on the Swift 5.10 release of SPM](https://github.com/swiftlang/swift-package-manager/blob/release/5.10/Sources/PackageDescription/SupportedPlatforms.swift#L34-L71)
@@ -6,6 +7,15 @@ import PackageDescription
 let allPlatforms: [Platform] = [.macOS, .macCatalyst, .iOS, .tvOS, .watchOS, .visionOS, .driverKit, .linux, .windows, .android, .wasi, .openbsd]
 let nonWASIPlatforms: [Platform] = allPlatforms.filter { $0 != .wasi }
 let wasiPlatform: [Platform] = [.wasi]
+
+// Embedded-wasm port (see /Users/scottm/git/c34/khasm/EMBEDDED_PORT_PLAN.md): with
+// KHASM_EMBEDDED=1 the SwiftNIO stack is dropped entirely — the Embedded build uses the
+// NIO-free, Swift-Concurrency driver over CSQLite gated in source with
+// `#if hasFeature(Embedded)`. `hasFeature` is not available in manifests (they run
+// host-side), hence the env-var conditional, matching khasm's own manifest gating.
+// Regular (non-embedded) builds — including regular WASI — keep the NIO stack exactly
+// as on the feat/khasmPAL-2026 base.
+let khasmEmbedded = ProcessInfo.processInfo.environment["KHASM_EMBEDDED"] == "1"
 
 let package = Package(
     name: "sqlite-nio",
@@ -44,14 +54,16 @@ let package = Package(
             dependencies: [
                 .target(name: "CSQLite"),
                 .product(name: "Logging", package: "swift-log"),
-                // The SwiftNIO stack is elided on WASI (normal + Embedded); .when(platforms:) is
-                // target-evaluated, so these aren't built when cross-compiling to wasm32-unknown-wasip1.
-                // The WASI path is a NIO-free, Swift-Concurrency driver over CSQLite, gated in source
-                // with `#if os(WASI)`.
-                .product(name: "NIOCore", package: "swift-nio", condition: .when(platforms: nonWASIPlatforms)),
-                .product(name: "NIOPosix", package: "swift-nio", condition: .when(platforms: nonWASIPlatforms)),
-                .product(name: "NIOFoundationCompat", package: "swift-nio", condition: .when(platforms: nonWASIPlatforms)),
-            ],
+            ] + (khasmEmbedded ? [] : [
+                // The SwiftNIO stack is dropped on the Embedded build (KHASM_EMBEDDED=1, see the
+                // note at the top); the Embedded path is a NIO-free, Swift-Concurrency driver over
+                // CSQLite, gated in source with `#if hasFeature(Embedded)`. All regular builds
+                // (native + regular WASI via NIOAsyncRuntime) keep the NIO stack.
+                .product(name: "NIOCore", package: "swift-nio"),
+                .product(name: "NIOAsyncRuntime", package: "swift-nio", condition: .when(platforms: wasiPlatform)),
+                .product(name: "NIOPosix", package: "swift-nio"),
+                .product(name: "NIOFoundationCompat", package: "swift-nio"),
+            ]),
             swiftSettings: swiftSettings
         ),
         .testTarget(

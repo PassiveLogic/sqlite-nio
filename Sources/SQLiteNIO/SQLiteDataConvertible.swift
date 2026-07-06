@@ -1,6 +1,6 @@
 // ByteBuffer (NIOCore), Data/Date (Foundation), and the NIOFoundationCompat bridges are all elided
-// on WASI; see the `#if os(WASI)` / `#if !os(WASI)` conformances below.
-#if !os(WASI)
+// on WASI; see the `#if hasFeature(Embedded)` / `#if !hasFeature(Embedded)` conformances below.
+#if !hasFeature(Embedded)
 import NIOCore
 import NIOFoundationCompat
 import Foundation
@@ -78,7 +78,7 @@ extension Float: SQLiteDataConvertible {
     }
 }
 
-#if os(WASI)
+#if hasFeature(Embedded)
 extension [UInt8]: SQLiteDataConvertible {
     public init?(sqliteData: SQLiteData) {
         guard case .blob(let value) = sqliteData else {
@@ -133,7 +133,7 @@ extension Bool: SQLiteDataConvertible {
 }
 
 // Date conversions rely on Foundation (`Date`, `ISO8601DateFormatter`), unavailable on WASI.
-#if !os(WASI)
+#if !hasFeature(Embedded)
 extension Date: SQLiteDataConvertible {
     public init?(sqliteData: SQLiteData) {
         let value: Double
@@ -192,4 +192,4 @@ var dateFormatter: ISO8601DateFormatter {
     ]
     return formatter
 }
-#endif  // !os(WASI)
+#endif  // !hasFeature(Embedded)

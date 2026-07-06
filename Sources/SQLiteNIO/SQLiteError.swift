@@ -1,13 +1,13 @@
 import CSQLite
 // Foundation provides `LocalizedError`; unavailable on WASI (`errorDescription` is kept as a plain
 // property there).
-#if !os(WASI)
+#if !hasFeature(Embedded)
 import Foundation
 #endif
 
 // `LocalizedError` is Foundation-only; declared via a gated extension (the `errorDescription`
 // witness lives in the struct body and is simply unused on WASI).
-#if !os(WASI)
+#if !hasFeature(Embedded)
 extension SQLiteError: LocalizedError {}
 #endif
 
