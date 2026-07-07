@@ -29,8 +29,14 @@ let package = Package(
         .library(name: "SQLiteNIO", targets: ["SQLiteNIO"]),
     ],
     dependencies: [
-        // Local clones for the embedded-wasm port (see /Users/scottm/git/c34/EMBEDDED_WASM_NOTES.md)
-        .package(path: "../swift-nio"),
+        // swift-nio stays on the PassiveLogic fork URL (feat/khasmPAL-2026, as on the base
+        // branch) rather than the local ../swift-nio clone: that clone carries the vestigial
+        // Option-1/2 embedded-NIO commits whose os(WASI) gates would change regular-WASI NIO
+        // behavior, and transitive *path* deps override URL declarations by identity in a
+        // consuming root graph (khasm). Under KHASM_EMBEDDED=1 NIO products are dropped, so
+        // the embedded build never compiles NIO from either source.
+        .package(url: "https://github.com/PassiveLogic/swift-nio.git", branch: "feat/khasmPAL-2026"),
+        // Local embedded-ported clone (see /Users/scottm/git/c34/EMBEDDED_WASM_NOTES.md).
         .package(path: "../swift-log"),
     ],
     targets: [
