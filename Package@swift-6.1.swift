@@ -38,7 +38,8 @@ let package = Package(
         // TODO: SM: Update swift-nio version once NIOAsyncRuntime is available from swift-nio
         // .package(url: "https://github.com/apple/swift-nio.git", from: "2.89.0"),
         .package(url: "https://github.com/PassiveLogic/swift-nio.git", branch: "feat/khasmPAL-2026"),
-        .package(url: "https://github.com/apple/swift-log.git", from: "1.5.4"),
+        // Local embedded-ported clone (see /Users/scottm/git/c34/EMBEDDED_WASM_NOTES.md).
+        .package(path: "../swift-log"),
     ],
     targets: [
         .plugin(
