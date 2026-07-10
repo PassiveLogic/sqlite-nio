@@ -1,26 +1,32 @@
-#if hasFeature(Embedded)
+#if NativeConcurrency
 import CSQLite
 import Logging
 
 /// A wrapper for the `OpaquePointer` used to represent an open `sqlite3` handle.
 ///
-/// On WASI the runtime is single-threaded, so no thread pool / locking is involved; the
-/// `@unchecked Sendable` is justified the same way as the SwiftNIO build (serialized SQLite,
-/// `SQLITE_OPEN_FULLMUTEX`), and the handle is only mutated to `nil` on close.
+/// The pointer itself is guarded by a lock (it is read on every query and written to `nil` on
+/// close); the SQLite handle behind it is opened `SQLITE_OPEN_FULLMUTEX`, so concurrent use of
+/// the handle is serialized by SQLite itself, as on the SwiftNIO build. On single-threaded
+/// targets (Embedded WASI) the lock degrades to direct access.
 final class SQLiteConnectionHandle: @unchecked Sendable {
-    var raw: OpaquePointer?
+    private let storage: NativeConcurrencyLockedBox<OpaquePointer?>
+
+    var raw: OpaquePointer? {
+        get { self.storage.withLock { $0 } }
+        set { self.storage.withLock { $0 = newValue } }
+    }
 
     init(_ raw: OpaquePointer?) {
-        self.raw = raw
+        self.storage = .init(raw)
     }
 }
 
-/// A single open connection to an SQLite database (WASI / Embedded build).
+/// A single open connection to an SQLite database (NativeConcurrency build).
 ///
 /// This is the NIO-free variant: it exposes a Swift-Concurrency (`async`/`await`) API over CSQLite
-/// with no `EventLoopFuture`, `EventLoopGroup`, or `NIOThreadPool`. Because WebAssembly is
-/// single-threaded, the blocking libsqlite3 calls run inline on the calling task. The observable
-/// hook API and connection pooling are not available on this build.
+/// with no `EventLoopFuture`, `EventLoopGroup`, or `NIOThreadPool`. The blocking libsqlite3 calls
+/// run inline on the calling task. The observable hook API and connection pooling are not
+/// available on this build.
 public final class SQLiteConnection: SQLiteDatabase, Sendable {
     /// The possible storage types for an SQLite database.
     public enum Storage: Equatable, Sendable {
@@ -145,4 +151,4 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
         assert(self.handle.raw == nil, "SQLiteConnection was not closed before deinitializing")
     }
 }
-#endif  // hasFeature(Embedded)
+#endif  // NativeConcurrency

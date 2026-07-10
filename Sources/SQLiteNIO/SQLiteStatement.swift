@@ -1,4 +1,4 @@
-#if !hasFeature(Embedded)
+#if !NativeConcurrency
 import NIOCore
 #endif
 import CSQLite
@@ -42,7 +42,7 @@ struct SQLiteStatement {
             
             switch bind {
             case .blob(let value):
-                #if hasFeature(Embedded)
+                #if NativeConcurrency
                 ret = value.withUnsafeBytes {
                     sqlite_nio_sqlite3_bind_blob64(self.handle, i, $0.baseAddress, UInt64($0.count), SQLITE_TRANSIENT)
                 }
@@ -110,7 +110,7 @@ struct SQLiteStatement {
             return .text(.init(cString: val))
         case SQLITE_BLOB:
             let length = Int(sqlite_nio_sqlite3_column_bytes(self.handle, offset))
-            #if hasFeature(Embedded)
+            #if NativeConcurrency
             var bytes = [UInt8]()
             bytes.reserveCapacity(length)
             if let blobPointer = sqlite_nio_sqlite3_column_blob(self.handle, offset) {

@@ -1,6 +1,6 @@
-// These re-exports are all SwiftNIO types, which are elided on the Embedded build (the NIO-free
-// Embedded path uses Swift Concurrency + `[UInt8]` instead of EventLoop/ByteBuffer).
-#if !hasFeature(Embedded)
+// These re-exports are all SwiftNIO types, which are elided on the NativeConcurrency build (the
+// NIO-free path uses Swift Concurrency + `[UInt8]` instead of EventLoop/ByteBuffer).
+#if !NativeConcurrency
 @_documentation(visibility: internal) @_exported import struct NIOCore.ByteBuffer
 
 // See SQLiteConnection.swift for why we gate on `os(WASI)` rather than
@@ -22,4 +22,4 @@
 #else
 @_documentation(visibility: internal) @_exported import class NIOPosix.MultiThreadedEventLoopGroup
 #endif
-#endif  // !hasFeature(Embedded)
+#endif  // !NativeConcurrency

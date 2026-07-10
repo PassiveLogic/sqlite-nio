@@ -1,5 +1,5 @@
 import CSQLite
-#if !hasFeature(Embedded)
+#if !NativeConcurrency
 import NIOCore
 #endif
 
@@ -31,8 +31,9 @@ public enum SQLiteData: Equatable, CustomStringConvertible, Sendable {
     /// `TEXT` affinity, represented in Swift by `String`.
     case text(String)
 
-    /// `BLOB` affinity. Represented by SwiftNIO's `ByteBuffer`, or by `[UInt8]` on WASI (NIO-free).
-    #if hasFeature(Embedded)
+    /// `BLOB` affinity. Represented by SwiftNIO's `ByteBuffer`, or by `[UInt8]` on the
+    /// NativeConcurrency (NIO-free) build.
+    #if NativeConcurrency
     case blob([UInt8])
     #else
     case blob(ByteBuffer)
@@ -103,7 +104,7 @@ public enum SQLiteData: Equatable, CustomStringConvertible, Sendable {
     /// Returns the data as a blob, if it has `BLOB` affinity.
     ///
     /// `INTEGER`, `REAL`, `TEXT`, and `NULL` values always return `nil`.
-	#if hasFeature(Embedded)
+	#if NativeConcurrency
 	public var blob: [UInt8]? {
 		switch self {
 		case .blob(let buffer): return buffer
@@ -134,7 +135,7 @@ public enum SQLiteData: Equatable, CustomStringConvertible, Sendable {
     // See `CustomStringConvertible.description`.
     public var description: String {
         switch self {
-        #if hasFeature(Embedded)
+        #if NativeConcurrency
         case .blob(let data): return "<\(data.count) bytes>"
         #else
         case .blob(let data): return "<\(data.readableBytes) bytes>"
@@ -154,8 +155,8 @@ public enum SQLiteData: Equatable, CustomStringConvertible, Sendable {
         case .integer(let value): try container.encode(value)
         case .float(let value): try container.encode(value)
         case .text(let value): try container.encode(value)
-        #if hasFeature(Embedded)
-        case .blob(let value): try container.encode(value) // [UInt8] encodes as raw bytes
+        #if NativeConcurrency
+        case .blob(let value): try container.encode(value) // [UInt8] encodes as raw bytes, matching the ByteBuffer branch
         #else
         case .blob(let value): try container.encode(Array(value.readableBytesView)) // N.B.: Don't use ByteBuffer's Codable conformance; it encodes as Base64, not raw bytes
         #endif
@@ -188,14 +189,14 @@ extension SQLiteData {
 		case SQLITE_BLOB:
 			if let bytes = sqlite_nio_sqlite3_value_blob(sqliteValue) {
 				let count = Int(sqlite_nio_sqlite3_value_bytes(sqliteValue))
-                #if hasFeature(Embedded)
+                #if NativeConcurrency
                 self = .blob([UInt8](UnsafeRawBufferPointer(start: bytes, count: count))) // copy bytes
                 #else
                 let buffer = ByteBuffer(bytes: UnsafeRawBufferPointer(start: bytes, count: count))
 				self = .blob(buffer) // copy bytes
                 #endif
 			} else {
-                #if hasFeature(Embedded)
+                #if NativeConcurrency
                 self = .blob([])
                 #else
 				self = .blob(ByteBuffer())

@@ -1,4 +1,4 @@
-#if !hasFeature(Embedded)  // EMBEDDED-WASI: NIO-based connection; the WASI build uses SQLiteConnection+WASI.swift
+#if !NativeConcurrency  // NIO-based hooks; the NativeConcurrency build uses SQLiteConnection+NativeConcurrency.swift (no hooks surface)
 import Foundation
 import NIOConcurrencyHelpers
 import NIOCore
@@ -867,4 +867,4 @@ extension SQLiteConnection {
     }
 }
 
-#endif  // !hasFeature(Embedded)
+#endif  // !NativeConcurrency

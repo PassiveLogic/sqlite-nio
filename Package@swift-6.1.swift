@@ -1,4 +1,4 @@
-// swift-tools-version:5.10
+// swift-tools-version:6.1
 import PackageDescription
 
 /// This list matches the [supported platforms on the Swift 5.10 release of SPM](https://github.com/swiftlang/swift-package-manager/blob/release/5.10/Sources/PackageDescription/SupportedPlatforms.swift#L34-L71)
@@ -17,6 +17,22 @@ let package = Package(
     ],
     products: [
         .library(name: "SQLiteNIO", targets: ["SQLiteNIO"]),
+    ],
+    traits: [
+        .default(enabledTraits: ["NIO"]),
+        .trait(
+            name: "NIO",
+            description: "Default backend: SwiftNIO (EventLoopFuture/ByteBuffer, NIOThreadPool)."
+        ),
+        .trait(
+            name: "NativeConcurrency",
+            description: "NIO-free backend on Swift concurrency (async/await, [UInt8] blobs). Build with `--traits NativeConcurrency` (replaces the default NIO backend)."
+        ),
+        .trait(
+            name: "Freestanding",
+            description: "Embedded/freestanding flavor (implies NativeConcurrency). No additional source effect in this package beyond NativeConcurrency; declared so a root's `--traits Freestanding` configuration names a known trait when this package is wired by path.",
+            enabledTraits: ["NativeConcurrency"]
+        ),
     ],
     dependencies: [
         // TODO: SM: Update swift-nio version once NIOAsyncRuntime is available from swift-nio
@@ -45,10 +61,13 @@ let package = Package(
             dependencies: [
                 .target(name: "CSQLite"),
                 .product(name: "Logging", package: "swift-log"),
-                .product(name: "NIOCore", package: "swift-nio"),
-                .product(name: "NIOAsyncRuntime", package: "swift-nio", condition: .when(platforms: wasiPlatform)),
-                .product(name: "NIOPosix", package: "swift-nio"),
-                .product(name: "NIOFoundationCompat", package: "swift-nio"),
+                // The SwiftNIO stack rides the default `NIO` trait. With `NativeConcurrency`
+                // enabled instead, SQLiteNIO is a NIO-free, Swift-Concurrency driver over
+                // CSQLite, gated in source with `#if NativeConcurrency`.
+                .product(name: "NIOCore", package: "swift-nio", condition: .when(traits: ["NIO"])),
+                .product(name: "NIOAsyncRuntime", package: "swift-nio", condition: .when(platforms: wasiPlatform, traits: ["NIO"])),
+                .product(name: "NIOPosix", package: "swift-nio", condition: .when(traits: ["NIO"])),
+                .product(name: "NIOFoundationCompat", package: "swift-nio", condition: .when(traits: ["NIO"])),
             ],
             swiftSettings: swiftSettings
         ),
@@ -59,10 +78,14 @@ let package = Package(
             ],
             swiftSettings: swiftSettings
         ),
-    ]
+    ],
+    swiftLanguageModes: [.v5]
 )
 
 var swiftSettings: [SwiftSetting] { [
+    // This manifest raises the tools-version to 6.1 (for package traits); the package sources
+    // stay in the Swift 5 language mode of the base manifest.
+    .swiftLanguageMode(.v5),
     .enableUpcomingFeature("ExistentialAny"),
     .enableUpcomingFeature("ConciseMagicFile"),
     .enableUpcomingFeature("ForwardTrailingClosures"),

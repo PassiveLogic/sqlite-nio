@@ -1,4 +1,4 @@
-#if !hasFeature(Embedded)  // EMBEDDED-WASI: NIO/EventLoopFuture protocol; WASI uses the async protocol below
+#if !NativeConcurrency  // NIO/EventLoopFuture protocol; the NativeConcurrency build uses the async protocol below
 import NIOCore
 import CSQLite
 import Logging
@@ -197,13 +197,13 @@ private struct SQLiteDatabaseCustomLogger<D: SQLiteDatabase>: SQLiteDatabase {
     }
 }
 
-#endif  // !hasFeature(Embedded)
+#endif  // !NativeConcurrency
 
-#if hasFeature(Embedded)
+#if NativeConcurrency
 import CSQLite
 import Logging
 
-/// NIO-free (`async`/`await`) variant of ``SQLiteDatabase`` for the WASI / Embedded build.
+/// NIO-free (`async`/`await`) variant of ``SQLiteDatabase`` for the NativeConcurrency build.
 ///
 /// The protocol deliberately has only non-generic requirements so it remains usable as an
 /// existential (`any SQLiteDatabase`) under Embedded Swift, which cannot place a generic method in a
@@ -234,9 +234,9 @@ extension SQLiteDatabase {
 
     /// Execute a query and collect the result rows.
     public func query(_ query: String, _ binds: [SQLiteData] = []) async throws -> [SQLiteRow] {
-        nonisolated(unsafe) var rows: [SQLiteRow] = []
-        try await self.query(query, binds) { rows.append($0) }
-        return rows
+        let rows = NativeConcurrencyLockedBox<[SQLiteRow]>([])
+        try await self.query(query, binds) { row in rows.withLock { $0.append(row) } }
+        return rows.withLock { $0 }
     }
 
     /// Return a database that logs to `logger`, forwarding everything else to `self`.
@@ -263,4 +263,4 @@ private struct SQLiteDatabaseCustomLogger<D: SQLiteDatabase>: SQLiteDatabase {
         Self(database: self.database, logger: logger)
     }
 }
-#endif  // hasFeature(Embedded)
+#endif  // NativeConcurrency
