@@ -300,9 +300,15 @@ public final class SQLiteCustomFunction: Hashable {
         case .text(let string):
             sqlite_nio_sqlite3_result_text(sqliteContext, string, -1, SQLITE_TRANSIENT)
         case .blob(let value):
+            #if NativeConcurrency
+            value.withUnsafeBytes { pointer in
+                sqlite_nio_sqlite3_result_blob(sqliteContext, pointer.baseAddress, Int32(value.count), SQLITE_TRANSIENT)
+            }
+            #else
             value.withUnsafeReadableBytes { pointer in
                 sqlite_nio_sqlite3_result_blob(sqliteContext, pointer.baseAddress, Int32(value.readableBytes), SQLITE_TRANSIENT)
             }
+            #endif
         }
     }
 
@@ -311,7 +317,11 @@ public final class SQLiteCustomFunction: Hashable {
             sqlite_nio_sqlite3_result_error(sqliteContext, error.message, -1)
             sqlite_nio_sqlite3_result_error_code(sqliteContext, error.reason.statusCode)
         } else {
+            #if hasFeature(Embedded)
+            sqlite_nio_sqlite3_result_error(sqliteContext, "custom function error", -1)  // `any Error` interpolation needs reflection
+            #else
             sqlite_nio_sqlite3_result_error(sqliteContext, "\(error)", -1)
+            #endif
         }
     }
 }

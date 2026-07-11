@@ -19,7 +19,9 @@ struct VendorSQLite: CommandPlugin {
     static let sqliteURL = URL(string: "https://sqlite.org")!
     static let vendorPrefix = "sqlite_nio"
     
-    static var verbose = false
+    // `nonisolated(unsafe)`: set once from `performCommand()` before any concurrent work; needed
+    // because plugins compile in the Swift 6 language mode under the tools-6.1 traits manifest.
+    nonisolated(unsafe) static var verbose = false
     
     var verbose: Bool { Self.verbose }
     

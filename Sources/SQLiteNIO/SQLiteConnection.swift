@@ -1,3 +1,4 @@
+#if !NativeConcurrency  // NIO-based connection; the NativeConcurrency build uses SQLiteConnection+NativeConcurrency.swift
 import NIOConcurrencyHelpers
 import NIOCore
 // Use NIOPosix on every host platform that supports it (macOS, Linux, etc.)
@@ -457,3 +458,5 @@ extension SQLiteConnection {
 		}
 	}
 }
+
+#endif  // !NativeConcurrency

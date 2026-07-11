@@ -1,4 +1,6 @@
+#if !NativeConcurrency
 import NIOCore
+#endif
 import CSQLite
 
 struct SQLiteStatement {
@@ -40,9 +42,15 @@ struct SQLiteStatement {
             
             switch bind {
             case .blob(let value):
+                #if NativeConcurrency
+                ret = value.withUnsafeBytes {
+                    sqlite_nio_sqlite3_bind_blob64(self.handle, i, $0.baseAddress, UInt64($0.count), SQLITE_TRANSIENT)
+                }
+                #else
                 ret = value.withUnsafeReadableBytes {
                     sqlite_nio_sqlite3_bind_blob64(self.handle, i, $0.baseAddress, UInt64($0.count), SQLITE_TRANSIENT)
                 }
+                #endif
             case .float(let value):
                 ret = sqlite_nio_sqlite3_bind_double(self.handle, i, value)
             case .integer(let value):
@@ -102,12 +110,21 @@ struct SQLiteStatement {
             return .text(.init(cString: val))
         case SQLITE_BLOB:
             let length = Int(sqlite_nio_sqlite3_column_bytes(self.handle, offset))
+            #if NativeConcurrency
+            var bytes = [UInt8]()
+            bytes.reserveCapacity(length)
+            if let blobPointer = sqlite_nio_sqlite3_column_blob(self.handle, offset) {
+                bytes.append(contentsOf: UnsafeRawBufferPointer(start: blobPointer, count: length))
+            }
+            return .blob(bytes)
+            #else
             var buffer = ByteBufferAllocator().buffer(capacity: length)
-            
+
             if let blobPointer = sqlite_nio_sqlite3_column_blob(self.handle, offset) {
                 buffer.writeBytes(UnsafeRawBufferPointer(start: blobPointer, count: length))
             }
             return .blob(buffer)
+            #endif
         case SQLITE_NULL:
             return .null
         default:

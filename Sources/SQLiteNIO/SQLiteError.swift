@@ -1,7 +1,17 @@
 import CSQLite
+// Foundation provides `LocalizedError`; unavailable on WASI (`errorDescription` is kept as a plain
+// property there).
+#if !hasFeature(Embedded)
 import Foundation
+#endif
 
-public struct SQLiteError: Error, CustomStringConvertible, LocalizedError {
+// `LocalizedError` is Foundation-only; declared via a gated extension (the `errorDescription`
+// witness lives in the struct body and is simply unused on WASI).
+#if !hasFeature(Embedded)
+extension SQLiteError: LocalizedError {}
+#endif
+
+public struct SQLiteError: Error, CustomStringConvertible {
     public let reason: Reason
     public let message: String
     

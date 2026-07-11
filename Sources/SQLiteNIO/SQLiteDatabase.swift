@@ -1,3 +1,4 @@
+#if !NativeConcurrency  // NIO/EventLoopFuture protocol; the NativeConcurrency build uses the async protocol below
 import NIOCore
 import CSQLite
 import Logging
@@ -195,3 +196,71 @@ private struct SQLiteDatabaseCustomLogger<D: SQLiteDatabase>: SQLiteDatabase {
         Self(database: self.database, logger: logger)
     }
 }
+
+#endif  // !NativeConcurrency
+
+#if NativeConcurrency
+import CSQLite
+import Logging
+
+/// NIO-free (`async`/`await`) variant of ``SQLiteDatabase`` for the NativeConcurrency build.
+///
+/// The protocol deliberately has only non-generic requirements so it remains usable as an
+/// existential (`any SQLiteDatabase`) under Embedded Swift, which cannot place a generic method in a
+/// protocol witness table. `withConnection(_:)` is therefore provided on the concrete
+/// ``SQLiteConnection`` rather than as a protocol requirement.
+public protocol SQLiteDatabase: Sendable {
+    /// The logger used by the connection.
+    var logger: Logger { get }
+
+    /// Execute a query, invoking `onRow` for each result row.
+    func query(
+        _ query: String,
+        _ binds: [SQLiteData],
+        logger: Logger,
+        _ onRow: @escaping @Sendable (SQLiteRow) -> Void
+    ) async throws
+}
+
+extension SQLiteDatabase {
+    /// Convenience: execute a query using the database's own logger.
+    public func query(
+        _ query: String,
+        _ binds: [SQLiteData] = [],
+        _ onRow: @escaping @Sendable (SQLiteRow) -> Void
+    ) async throws {
+        try await self.query(query, binds, logger: self.logger, onRow)
+    }
+
+    /// Execute a query and collect the result rows.
+    public func query(_ query: String, _ binds: [SQLiteData] = []) async throws -> [SQLiteRow] {
+        let rows = NativeConcurrencyLockedBox<[SQLiteRow]>([])
+        try await self.query(query, binds) { row in rows.withLock { $0.append(row) } }
+        return rows.withLock { $0 }
+    }
+
+    /// Return a database that logs to `logger`, forwarding everything else to `self`.
+    public func logging(to logger: Logger) -> any SQLiteDatabase {
+        SQLiteDatabaseCustomLogger(database: self, logger: logger)
+    }
+}
+
+/// Replaces the `Logger` of an existing ``SQLiteDatabase`` while forwarding queries to the original.
+private struct SQLiteDatabaseCustomLogger<D: SQLiteDatabase>: SQLiteDatabase {
+    let database: D
+    let logger: Logger
+
+    func query(
+        _ query: String,
+        _ binds: [SQLiteData],
+        logger: Logger,
+        _ onRow: @escaping @Sendable (SQLiteRow) -> Void
+    ) async throws {
+        try await self.database.query(query, binds, logger: logger, onRow)
+    }
+
+    func logging(to logger: Logger) -> any SQLiteDatabase {
+        Self(database: self.database, logger: logger)
+    }
+}
+#endif  // NativeConcurrency

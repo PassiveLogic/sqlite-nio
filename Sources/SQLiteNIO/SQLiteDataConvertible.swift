@@ -1,6 +1,12 @@
+// ByteBuffer (NIOCore) and the NIOFoundationCompat bridges are elided on the NativeConcurrency
+// (NIO-free) build; Foundation (`Data`/`Date`) is used whenever it is available.
+#if !NativeConcurrency
 import NIOCore
 import NIOFoundationCompat
+#endif
+#if canImport(Foundation)
 import Foundation
+#endif
 
 public protocol SQLiteDataConvertible {
     init?(sqliteData: SQLiteData)
@@ -74,6 +80,35 @@ extension Float: SQLiteDataConvertible {
     }
 }
 
+#if NativeConcurrency
+extension [UInt8]: SQLiteDataConvertible {
+    public init?(sqliteData: SQLiteData) {
+        guard case .blob(let value) = sqliteData else {
+            return nil
+        }
+        self = value
+    }
+
+    public var sqliteData: SQLiteData? {
+        .blob(self)
+    }
+}
+
+#if canImport(Foundation)
+extension Data: SQLiteDataConvertible {
+    public init?(sqliteData: SQLiteData) {
+        guard case .blob(let value) = sqliteData else {
+            return nil
+        }
+        self = .init(value)
+    }
+
+    public var sqliteData: SQLiteData? {
+        .blob([UInt8](self))
+    }
+}
+#endif
+#else
 extension ByteBuffer: SQLiteDataConvertible {
     public init?(sqliteData: SQLiteData) {
         guard case .blob(let value) = sqliteData else {
@@ -99,6 +134,7 @@ extension Data: SQLiteDataConvertible {
         .blob(.init(data: self))
     }
 }
+#endif
 
 extension Bool: SQLiteDataConvertible {
     public init?(sqliteData: SQLiteData) {
@@ -113,6 +149,9 @@ extension Bool: SQLiteDataConvertible {
     }
 }
 
+// Date conversions rely on Foundation (`Date`, `ISO8601DateFormatter`), unavailable in
+// Embedded Swift.
+#if !hasFeature(Embedded)
 extension Date: SQLiteDataConvertible {
     public init?(sqliteData: SQLiteData) {
         let value: Double
@@ -171,3 +210,4 @@ var dateFormatter: ISO8601DateFormatter {
     ]
     return formatter
 }
+#endif  // !hasFeature(Embedded)

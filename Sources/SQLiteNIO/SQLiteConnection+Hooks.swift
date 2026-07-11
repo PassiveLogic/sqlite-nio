@@ -1,3 +1,4 @@
+#if !NativeConcurrency  // NIO-based hooks; the NativeConcurrency build uses SQLiteConnection+NativeConcurrency.swift (no hooks surface)
 import Foundation
 import NIOConcurrencyHelpers
 import NIOCore
@@ -865,3 +866,5 @@ extension SQLiteConnection {
         self.observerBuckets.withLockedValue { $0 = .init() }
     }
 }
+
+#endif  // !NativeConcurrency

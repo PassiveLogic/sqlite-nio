@@ -16,6 +16,8 @@ public enum SQLiteDataType {
     /// `NULL`.
     case null
 
+    // `any Encodable` is unavailable in Embedded Swift; this type is deprecated/unused anyway.
+    #if !hasFeature(Embedded)
     public func serialize(_ binds: inout [any Encodable]) -> String {
         switch self {
         case .integer: return "INTEGER"
@@ -25,4 +27,5 @@ public enum SQLiteDataType {
         case .null: return "NULL"
         }
     }
+    #endif
 }

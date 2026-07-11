@@ -1,5 +1,7 @@
 import CSQLite
+#if !NativeConcurrency
 import NIOCore
+#endif
 
 #if _pointerBitWidth(_64)
 /// We use `Int` on 64-bit systems due to public API breakage concerns.
@@ -17,7 +19,9 @@ public typealias SQLiteInt64 = Int64 // On 32-bit platforms, we want to use 64 b
 ///
 /// SQLite supports four data type "affinities" - INTEGER, REAL, TEXT, and BLOB - plus the `NULL` value, which has no
 /// innate affinity.
-public enum SQLiteData: Equatable, Encodable, CustomStringConvertible, Sendable {
+// `Encodable` is added via a conditional extension below: it relies on `Encoder`, which is
+// unavailable in Embedded Swift.
+public enum SQLiteData: Equatable, CustomStringConvertible, Sendable {
     /// `INTEGER` affinity, represented in Swift by `Int`.
     case integer(SQLiteInt64)
 
@@ -27,8 +31,13 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible, Sendable 
     /// `TEXT` affinity, represented in Swift by `String`.
     case text(String)
 
-    /// `BLOB` affinity, represented in Swift by `ByteBuffer`.
+    /// `BLOB` affinity. Represented by SwiftNIO's `ByteBuffer`, or by `[UInt8]` on the
+    /// NativeConcurrency (NIO-free) build.
+    #if NativeConcurrency
+    case blob([UInt8])
+    #else
     case blob(ByteBuffer)
+    #endif
 
     /// A `NULL` value.
     case null
@@ -95,6 +104,14 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible, Sendable 
     /// Returns the data as a blob, if it has `BLOB` affinity.
     ///
     /// `INTEGER`, `REAL`, `TEXT`, and `NULL` values always return `nil`.
+	#if NativeConcurrency
+	public var blob: [UInt8]? {
+		switch self {
+		case .blob(let buffer): return buffer
+		case .integer, .float, .text, .null: return nil
+		}
+	}
+	#else
 	public var blob: ByteBuffer? {
 		switch self {
 		case .blob(let buffer):
@@ -103,6 +120,7 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible, Sendable 
 			return nil
 		}
 	}
+	#endif
 
     /// `true` if the value is `NULL`, `false` otherwise.
 	public var isNull: Bool {
@@ -117,7 +135,11 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible, Sendable 
     // See `CustomStringConvertible.description`.
     public var description: String {
         switch self {
+        #if NativeConcurrency
+        case .blob(let data): return "<\(data.count) bytes>"
+        #else
         case .blob(let data): return "<\(data.readableBytes) bytes>"
+        #endif
         case .float(let float): return float.description
         case .integer(let int): return int.description
         case .null: return "null"
@@ -125,18 +147,28 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible, Sendable 
         }
     }
 
-    // See `Encodable.encode(to:)`.
+    // See `Encodable.encode(to:)`. Unavailable in Embedded Swift (no `Encoder`).
+    #if !hasFeature(Embedded)
     public func encode(to encoder: any Encoder) throws {
         var container = encoder.singleValueContainer()
         switch self {
         case .integer(let value): try container.encode(value)
         case .float(let value): try container.encode(value)
         case .text(let value): try container.encode(value)
+        #if NativeConcurrency
+        case .blob(let value): try container.encode(value) // [UInt8] encodes as raw bytes, matching the ByteBuffer branch
+        #else
         case .blob(let value): try container.encode(Array(value.readableBytesView)) // N.B.: Don't use ByteBuffer's Codable conformance; it encodes as Base64, not raw bytes
+        #endif
         case .null: try container.encodeNil()
         }
     }
+    #endif
 }
+
+#if !hasFeature(Embedded)
+extension SQLiteData: Encodable {}
+#endif
 
 extension SQLiteData {
     /// Attempt to interpret an `sqlite3_value` as an equivalent ``SQLiteData``.
@@ -157,10 +189,18 @@ extension SQLiteData {
 		case SQLITE_BLOB:
 			if let bytes = sqlite_nio_sqlite3_value_blob(sqliteValue) {
 				let count = Int(sqlite_nio_sqlite3_value_bytes(sqliteValue))
+                #if NativeConcurrency
+                self = .blob([UInt8](UnsafeRawBufferPointer(start: bytes, count: count))) // copy bytes
+                #else
                 let buffer = ByteBuffer(bytes: UnsafeRawBufferPointer(start: bytes, count: count))
 				self = .blob(buffer) // copy bytes
+                #endif
 			} else {
+                #if NativeConcurrency
+                self = .blob([])
+                #else
 				self = .blob(ByteBuffer())
+                #endif
 			}
 		case let type:
             throw SQLiteCustomFunctionUnexpectedValueTypeError(type: type)
