@@ -1,5 +1,4 @@
 import NIOCore
-import NIOPosix
 import VaporCSQLite
 import Logging
 

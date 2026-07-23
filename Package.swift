@@ -1,6 +1,12 @@
 // swift-tools-version:5.10
 import PackageDescription
 
+/// This list matches the [supported platforms on the Swift 5.10 release of SPM](https://github.com/swiftlang/swift-package-manager/blob/release/5.10/Sources/PackageDescription/SupportedPlatforms.swift#L34-L71)
+/// Don't add new platforms here unless raising the swift-tools-version of this manifest.
+let allPlatforms: [Platform] = [.macOS, .macCatalyst, .iOS, .tvOS, .watchOS, .visionOS, .driverKit, .linux, .windows, .android, .wasi, .openbsd]
+let nonWASIPlatforms: [Platform] = allPlatforms.filter { $0 != .wasi }
+let wasiPlatform: [Platform] = [.wasi]
+
 let package = Package(
     name: "sqlite-nio",
     platforms: [
@@ -13,7 +19,9 @@ let package = Package(
         .library(name: "SQLiteNIO", targets: ["SQLiteNIO"]),
     ],
     dependencies: [
+        // WASM: upstream swift-nio (NIOCore is wasm-safe) + standalone NIOAsyncRuntime for wasi.
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.97.1"),
+        .package(url: "https://github.com/PassiveLogic/nio-async-runtime.git", from: "1.0.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.11.0"),
     ],
     targets: [
@@ -38,7 +46,8 @@ let package = Package(
                 .target(name: "VaporCSQLite"),
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "NIOCore", package: "swift-nio"),
-                .product(name: "NIOPosix", package: "swift-nio"),
+                .product(name: "NIOAsyncRuntime", package: "nio-async-runtime", condition: .when(platforms: wasiPlatform)),
+                .product(name: "NIOPosix", package: "swift-nio", condition: .when(platforms: nonWASIPlatforms)),
                 .product(name: "NIOFoundationCompat", package: "swift-nio"),
             ],
             swiftSettings: swiftSettings
@@ -92,7 +101,12 @@ var sqliteCSettings: [CSetting] { [
     .define("SQLITE_OMIT_TCL_VARIABLE"),
     .define("SQLITE_OMIT_TRACE"),
     .define("SQLITE_SECURE_DELETE"),
-    .define("SQLITE_THREADSAFE", to: "1"),
+    .define("SQLITE_THREADSAFE", to: "1", .when(platforms: nonWASIPlatforms)),
+    // For now, we use the single threaded sqlite variation for the WASI platform
+    // since single-threaded operation is the least common denominator capability
+    // for Wasm executables and it is considered unreliable to use canImport(wasi_pthread)
+    // in a manifest file to distinguish between the two capabilities.
+    .define("SQLITE_THREADSAFE", to: "0", .when(platforms: wasiPlatform)),
     .define("SQLITE_UNTESTABLE"),
     .define("SQLITE_USE_URI"),
     .define("HAVE_GETHOSTUUID", to: "0", .when(platforms: [.iOS])) // silences compiler warning

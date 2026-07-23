@@ -43,6 +43,7 @@ jobs:
       ios_scheme_name: sqlite-nio
       with_musl: true
       with_android: true
+      with_wasm: true
 
   submit-dependencies:
     permissions:
@@ -50,4 +51,3 @@ jobs:
     if: ${{ github.event_name == 'push' }}
     uses: vapor/ci/.github/workflows/submit-deps.yml@main
     secrets: inherit
-
