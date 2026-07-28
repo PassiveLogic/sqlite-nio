@@ -1,7 +1,23 @@
 #if canImport(NIOCore)
 import NIOConcurrencyHelpers
 import NIOCore
+// DOWNSTREAM-ONLY (integration/khasm-embedded): khasm's regular wasm flavor keeps SwiftNIO on
+// WASI (see Package.swift), so this file compiles there too. Use NIOPosix on every host
+// platform and substitute the PL fork's NIOAsyncRuntime on WASI, where NIOPosix's `Posix*`
+// primitives can't compile. Static `os(WASI)` is the right gate:
+//   - `canImport(NIOAsyncRuntime)` is too greedy: the module can sit in the graph on
+//     macOS/Linux too, but `AsyncEventLoopGroup` is `@available(macOS 15, *)` and breaks
+//     consumers with older deployment targets (this package declares `.macOS(.v10_15)`).
+//   - `canImport(NIOPosix)` is too greedy the other way: on WASI NIOPosix resolves as a
+//     partial module with no `MultiThreadedEventLoopGroup`/`NIOThreadPool`, so the imports
+//     below would fail at link time.
+#if os(WASI)
+import NIOAsyncRuntime
+typealias MultiThreadedEventLoopGroup = AsyncEventLoopGroup
+public typealias NIOThreadPool = AsyncThreadPool
+#else
 import NIOPosix
+#endif
 #endif
 import VaporCSQLite
 import Logging

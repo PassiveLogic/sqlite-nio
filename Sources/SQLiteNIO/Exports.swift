@@ -1,9 +1,18 @@
 #if canImport(NIOCore)
 @_documentation(visibility: internal) @_exported import struct NIOCore.ByteBuffer
-@_documentation(visibility: internal) @_exported import class NIOPosix.NIOThreadPool
 @_documentation(visibility: internal) @_exported import protocol NIOCore.EventLoop
 @_documentation(visibility: internal) @_exported import protocol NIOCore.EventLoopGroup
+
+// DOWNSTREAM-ONLY (integration/khasm-embedded): khasm's regular wasm flavor keeps SwiftNIO
+// on WASI, where NIOPosix has no thread pool / event-loop group. See SQLiteConnection.swift
+// for why this is gated on static `os(WASI)` rather than on `canImport`.
+#if os(WASI)
+@_documentation(visibility: internal) @_exported import class NIOAsyncRuntime.AsyncThreadPool
+@_documentation(visibility: internal) @_exported import class NIOAsyncRuntime.AsyncEventLoopGroup
+#else
+@_documentation(visibility: internal) @_exported import class NIOPosix.NIOThreadPool
 @_documentation(visibility: internal) @_exported import class NIOPosix.MultiThreadedEventLoopGroup
+#endif
 #else  // !canImport(NIOCore)
 /// `BLOB` values are carried by `[UInt8]` on platforms where SwiftNIO is not available.
 ///

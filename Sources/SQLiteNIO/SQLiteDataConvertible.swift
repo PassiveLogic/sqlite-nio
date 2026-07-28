@@ -16,8 +16,16 @@ import CRT
 import NIOCore
 #endif
 #if canImport(FoundationEssentials)
-#if canImport(NIOCore)
+// DOWNSTREAM-ONLY (integration/khasm-embedded): the PL swift-nio fork (2.94.0-based) predates
+// NIOFoundationEssentialsCompat, so where the fork supplies NIO the `Data` bridge comes from
+// NIOFoundationCompat instead (see Package.swift). Every platform that reaches this branch with
+// NIO present (WASI under khasm's regular wasm flavor, Linux) re-exports
+// `FoundationEssentials.Data` as `Foundation.Data`, so the bridge applies to the same type.
+// The first arm keeps the upstream spelling compiling unchanged if the fork gains the module.
+#if canImport(NIOFoundationEssentialsCompat)
 import NIOFoundationEssentialsCompat
+#elseif canImport(NIOCore) && canImport(NIOFoundationCompat)
+import NIOFoundationCompat
 #endif
 import FoundationEssentials
 #elseif canImport(Foundation)

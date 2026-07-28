@@ -1,4 +1,5 @@
 // swift-tools-version:6.1
+import class Foundation.ProcessInfo
 import PackageDescription
 
 /// `.when(platforms:)` can only include, never exclude, so excluding WASI means listing everything else.
@@ -7,6 +8,32 @@ import PackageDescription
 let nonWASIPlatforms: [Platform] = [
     .macOS, .macCatalyst, .iOS, .tvOS, .watchOS, .visionOS, .driverKit, .linux, .windows, .android, .openbsd,
 ]
+
+// ┌───────────────────────────────────────────────────────────────────────────────┐
+// │ DOWNSTREAM-ONLY — `integration/khasm-embedded`. NOT FOR UPSTREAM.             │
+// │ Must never be cherry-picked onto feat/wasi-nio-free or feat/embedded-support. │
+// └───────────────────────────────────────────────────────────────────────────────┘
+//
+// Upstream (feat/wasi-nio-free) elides SwiftNIO for ALL of WASI, so the NIO-free
+// backend is what every wasm consumer gets. khasm has TWO wasm flavors and only one
+// of them can accept that:
+//
+//   - Embedded/Freestanding (KHASM_EMBEDDED=1): wants exactly the upstream behavior.
+//   - Regular wasm (wasm32-unknown-wasip1, no Embedded): its storage stack
+//     (QuantumStorageCore's QuantumMigrator, quantum-sqlite-driver) uses
+//     `EventLoopConnectionPool<SQLiteConnectionSource>`, `NIOThreadPool`,
+//     `database.eventLoop` and `EventLoopFuture` UNGATED. Dropping SwiftNIO on WASI
+//     deletes all of that, and porting those two packages to the NIO-free surface is
+//     an open work item (see quantum-sqlite-driver's own manifest note).
+//
+// So NIO is elided on WASI only for the Embedded flavor. Every other build — hosts,
+// CI, and khasm's regular wasm — keeps the full SwiftNIO surface exactly as before,
+// which makes `canImport(NIOCore)` true there and renders the upstream Track-A gates
+// inert. On WASI the SwiftNIO products come from the PassiveLogic fork (below).
+let allPlatforms: [Platform] = nonWASIPlatforms + [.wasi]
+let wasiPlatform: [Platform] = [.wasi]
+let khasmEmbedded = ProcessInfo.processInfo.environment["KHASM_EMBEDDED"] == "1"
+let nioPlatforms: [Platform] = khasmEmbedded ? nonWASIPlatforms : allPlatforms
 
 let package = Package(
     name: "sqlite-nio",
@@ -20,7 +47,24 @@ let package = Package(
         .library(name: "SQLiteNIO", targets: ["SQLiteNIO"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-nio.git", from: "2.101.3"),
+        // DOWNSTREAM-ONLY: the PassiveLogic fork, not apple/swift-nio. Two reasons, both
+        // khasm-specific:
+        //   1. NIOAsyncRuntime (used below on WASI) is fork-only — upstream SwiftNIO has
+        //      no EventLoopGroup that compiles for wasm32-unknown-wasip1.
+        //   2. Package identity: khasm's root manifest pins this identity to the fork on
+        //      a branch. When this manifest named apple/swift-nio, SwiftPM canonicalized
+        //      the `swift-nio` identity onto the upstream URL while keeping the root's
+        //      branch requirement, then failed with `unable to read tree` on the
+        //      fork-only revision. Agreeing with the root's location avoids that.
+        // NOTE: the fork is based on upstream 2.94.0 — BELOW upstream sqlite-nio's declared
+        // 2.101.3 floor. The branch requirement makes the floor moot for resolution, and the
+        // APIs this package uses (`NIOThreadPool.singleton`/`.WorkItemState`/`runIfActive`,
+        // `MultiThreadedEventLoopGroup.singleton`) all exist in 2.94. The one casualty is the
+        // `NIOFoundationEssentialsCompat` product (introduced later) — see the target note.
+        .package(url: "https://github.com/PassiveLogic/swift-nio.git", branch: "feat/khasmPAL-2026"),
+        // swift-log stays on the upstream URL: khasm's ROOT manifest path-wires
+        // `../swift-log` to the Embedded-patched clone, and a root path declaration wins
+        // this identity graph-wide.
         .package(url: "https://github.com/apple/swift-log.git", from: "1.14.0"),
     ],
     targets: [
@@ -44,17 +88,26 @@ let package = Package(
             dependencies: [
                 .target(name: "VaporCSQLite"),
                 .product(name: "Logging", package: "swift-log"),
-                // SwiftNIO does not support wasm32-unknown-wasip1: NIOPosix is built around POSIX
-                // sockets and threads, neither of which WASI preview 1 provides. On WASI these
-                // products are therefore not linked, and the `#if canImport(NIOCore)` gates in
-                // Sources/ drop the `EventLoopFuture` API in favor of the `async` one.
-                // (`NIOFoundationCompat` keeps its Darwin-only condition, which already excludes WASI.)
-                .product(name: "NIOCore", package: "swift-nio", condition: .when(platforms: nonWASIPlatforms)),
-                .product(name: "NIOPosix", package: "swift-nio", condition: .when(platforms: nonWASIPlatforms)),
-                .product(name: "NIOFoundationCompat", package: "swift-nio",
-                         condition: .when(platforms: [.macOS, .iOS, .tvOS, .watchOS, .macCatalyst, .visionOS])),
-                .product(name: "NIOFoundationEssentialsCompat", package: "swift-nio", condition: .when(platforms: nonWASIPlatforms)),
-            ],
+                // Upstream drops these on WASI unconditionally; DOWNSTREAM-ONLY, khasm keeps
+                // them for its regular wasm flavor (`nioPlatforms` == every platform unless
+                // KHASM_EMBEDDED=1 — see the note at the top). On WASI, NIOPosix imports as a
+                // partial module without `MultiThreadedEventLoopGroup`/`NIOThreadPool`, so
+                // NIOAsyncRuntime supplies both; Sources/SQLiteNIO/{Exports,SQLiteConnection}.swift
+                // pick between them with `#if os(WASI)`.
+                .product(name: "NIOCore", package: "swift-nio", condition: .when(platforms: nioPlatforms)),
+                .product(name: "NIOPosix", package: "swift-nio", condition: .when(platforms: nioPlatforms)),
+                // DOWNSTREAM-ONLY: upstream conditions NIOFoundationCompat to Darwin and bridges
+                // `FoundationEssentials.Data` through NIOFoundationEssentialsCompat everywhere
+                // else. The PL fork (2.94.0-based) predates NIOFoundationEssentialsCompat, and
+                // SwiftPM validates product existence regardless of platform conditions, so that
+                // product reference is REMOVED here and NIOFoundationCompat covers all platforms
+                // where NIO is present instead (on WASI/Linux, `Foundation.Data` IS
+                // `FoundationEssentials.Data` re-exported, so the bridge API is the same one).
+                // Sources/SQLiteNIO/SQLiteDataConvertible.swift carries the matching import gate.
+                .product(name: "NIOFoundationCompat", package: "swift-nio", condition: .when(platforms: nioPlatforms)),
+            ] + (khasmEmbedded ? [] : [
+                .product(name: "NIOAsyncRuntime", package: "swift-nio", condition: .when(platforms: wasiPlatform)),
+            ] as [Target.Dependency]),
             swiftSettings: swiftSettings
         ),
         .testTarget(
