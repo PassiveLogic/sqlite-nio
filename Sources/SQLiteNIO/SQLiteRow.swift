@@ -25,7 +25,12 @@ public struct SQLiteRow: CustomStringConvertible, Sendable {
     }
 
     public var description: String {
+        #if hasFeature(Embedded)
+        // `Array.description` goes through reflection, which Embedded Swift does not provide.
+        "[" + self.columns.map { $0.description }.joined(separator: ", ") + "]"
+        #else
         self.columns.description
+        #endif
     }
 }
 

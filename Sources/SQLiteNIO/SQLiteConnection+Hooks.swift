@@ -1,3 +1,9 @@
+// N.B.: This is elided wholesale, rather than narrowed, because the hook API's *public* surface is
+// Foundation-shaped: `SQLiteCommitEvent.date` and `SQLiteRollbackEvent.date` are `Date`, and
+// `SQLiteHookToken.id` is a `UUID`. Embedded Swift has neither type in either Foundation flavor,
+// so keeping the API here would mean either shipping stand-ins for both or giving Embedded a
+// different public API than every other target. Neither belongs in this commit.
+#if canImport(FoundationEssentials) || canImport(Foundation)
 #if canImport(FoundationEssentials)
 import FoundationEssentials
 #else
@@ -871,3 +877,4 @@ extension SQLiteConnection {
         self.observerBuckets.withLockedValue { $0 = .init() }
     }
 }
+#endif  // canImport(FoundationEssentials) || canImport(Foundation)

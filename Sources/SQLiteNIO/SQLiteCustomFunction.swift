@@ -311,7 +311,12 @@ public final class SQLiteCustomFunction: Hashable {
             sqlite_nio_sqlite3_result_error(sqliteContext, error.message, -1)
             sqlite_nio_sqlite3_result_error_code(sqliteContext, error.reason.statusCode)
         } else {
+            #if hasFeature(Embedded)
+            // Interpolating an `any Error` needs reflection, unavailable in Embedded Swift.
+            sqlite_nio_sqlite3_result_error(sqliteContext, "custom function error", -1)
+            #else
             sqlite_nio_sqlite3_result_error(sqliteContext, "\(error)", -1)
+            #endif
         }
     }
 }

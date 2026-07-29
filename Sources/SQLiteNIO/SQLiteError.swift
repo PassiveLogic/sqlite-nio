@@ -1,11 +1,17 @@
 import VaporCSQLite
 #if canImport(FoundationEssentials)
 import FoundationEssentials
-#else
+#elseif canImport(Foundation)
 import Foundation
 #endif
 
-public struct SQLiteError: Error, CustomStringConvertible, LocalizedError {
+// `LocalizedError` needs one of the Foundation flavors, and Embedded Swift has neither. The
+// `errorDescription` witness stays in the type body; only the conformance is conditional.
+#if canImport(FoundationEssentials) || canImport(Foundation)
+extension SQLiteError: LocalizedError {}
+#endif
+
+public struct SQLiteError: Error, CustomStringConvertible {
     public let reason: Reason
     public let message: String
     

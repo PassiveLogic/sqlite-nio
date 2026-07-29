@@ -16,7 +16,10 @@ public typealias SQLiteInt64 = Int
 ///
 /// SQLite supports four data type "affinities" - INTEGER, REAL, TEXT, and BLOB - plus the `NULL` value, which has no
 /// innate affinity.
-public enum SQLiteData: Equatable, Encodable, CustomStringConvertible, Sendable {
+///
+/// > Note: The `Encodable` conformance is declared in a conditional extension below, because
+/// > `Encoder` is unavailable in Embedded Swift.
+public enum SQLiteData: Equatable, CustomStringConvertible, Sendable {
     /// `INTEGER` affinity, represented in Swift by `Int`.
     case integer(SQLiteInt64)
 
@@ -112,7 +115,8 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible, Sendable 
         }
     }
 
-    // See `Encodable.encode(to:)`.
+    // See `Encodable.encode(to:)`. `Encoder` is unavailable in Embedded Swift.
+    #if !hasFeature(Embedded)
     public func encode(to encoder: any Encoder) throws {
         var container = encoder.singleValueContainer()
         switch self {
@@ -123,7 +127,12 @@ public enum SQLiteData: Equatable, Encodable, CustomStringConvertible, Sendable 
         case .null:               try container.encodeNil()
         }
     }
+    #endif  // !hasFeature(Embedded)
 }
+
+#if !hasFeature(Embedded)
+extension SQLiteData: Encodable {}
+#endif
 
 extension SQLiteData {
     /// Attempt to interpret an `sqlite3_value` as an equivalent ``SQLiteData``.

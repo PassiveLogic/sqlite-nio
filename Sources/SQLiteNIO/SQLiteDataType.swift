@@ -16,6 +16,9 @@ public enum SQLiteDataType {
     /// `NULL`.
     case null
 
+    // `any Encodable` requires runtime existentials that Embedded Swift does not provide. The
+    // method is deprecated and unused, so it is simply elided there.
+    #if !hasFeature(Embedded)
     public func serialize(_ binds: inout [any Encodable]) -> String {
         switch self {
         case .integer: return "INTEGER"
@@ -25,4 +28,5 @@ public enum SQLiteDataType {
         case .null: return "NULL"
         }
     }
+    #endif  // !hasFeature(Embedded)
 }

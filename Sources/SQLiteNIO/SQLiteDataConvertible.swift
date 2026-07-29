@@ -20,7 +20,7 @@ import NIOCore
 import NIOFoundationEssentialsCompat
 #endif
 import FoundationEssentials
-#else
+#elseif canImport(Foundation)
 #if canImport(NIOCore)
 import NIOFoundationCompat
 #endif
@@ -112,6 +112,8 @@ extension ByteBuffer: SQLiteDataConvertible {
     }
 }
 
+// The `Data` bridge needs a Foundation flavor, and Embedded Swift has neither.
+#if canImport(FoundationEssentials) || canImport(Foundation)
 extension Data: SQLiteDataConvertible {
     public init?(sqliteData: SQLiteData) {
         guard case .blob(let value) = sqliteData else {
@@ -126,6 +128,7 @@ extension Data: SQLiteDataConvertible {
         .blob(.init(data: self))
     }
 }
+#endif  // canImport(FoundationEssentials) || canImport(Foundation)
 
 extension Bool: SQLiteDataConvertible {
     public init?(sqliteData: SQLiteData) {
@@ -140,6 +143,8 @@ extension Bool: SQLiteDataConvertible {
     }
 }
 
+// The `Date` bridge needs a Foundation flavor, and Embedded Swift has neither.
+#if canImport(FoundationEssentials) || canImport(Foundation)
 extension Date: SQLiteDataConvertible {
     public init?(sqliteData: SQLiteData) {
         let value: Double
@@ -203,3 +208,4 @@ extension Date: SQLiteDataConvertible {
         .float(self.timeIntervalSince1970)
     }
 }
+#endif  // canImport(FoundationEssentials) || canImport(Foundation)

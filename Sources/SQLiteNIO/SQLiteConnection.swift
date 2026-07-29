@@ -253,8 +253,11 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
     /// The underlying `sqlite3` connection handle.
     let handle: SQLiteConnectionHandle
 
+    // The hook API needs a Foundation flavor; see `SQLiteConnection+Hooks.swift`.
+    #if canImport(FoundationEssentials) || canImport(Foundation)
     /// Container for storing multiple observers per hook type.
     let observerBuckets = NIOLockedValueBox<ObserverBuckets>(.init())
+    #endif
 
     #if canImport(NIOCore)
     /// The thread pool used by this connection when calling libsqlite3 APIs.
@@ -499,7 +502,10 @@ extension SQLiteConnection {
     /// No further operations may be performed on the connection after calling this method.
     public func close() async throws {
         try await self.withBlockingIO {
+            // The hook API needs a Foundation flavor; see `SQLiteConnection+Hooks.swift`.
+            #if canImport(FoundationEssentials) || canImport(Foundation)
             self.clearAllHooks()
+            #endif
             sqlite_nio_sqlite3_close(self.handle.raw)
             self.handle.raw = nil
         }

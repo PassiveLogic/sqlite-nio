@@ -79,6 +79,10 @@ public protocol SQLiteDatabase: Sendable {
     ) -> EventLoopFuture<T>
     #endif  // canImport(NIOCore)
 
+    // Unavailable in Embedded Swift: a generic method requirement cannot be placed in a witness
+    // table, so keeping it would make `any SQLiteDatabase` unusable there.
+    // ``SQLiteConnection/withConnection(_:)`` remains available on the concrete type.
+    #if !hasFeature(Embedded)
     /// Call the provided closure with a concrete ``SQLiteConnection`` instance, concurrency version.
     ///
     /// This method is required to provide a connection object which executes all queries directed to it in the
@@ -92,6 +96,7 @@ public protocol SQLiteDatabase: Sendable {
     func withConnection<T>(
         _ closure: @escaping @Sendable (SQLiteConnection) async throws -> T
     ) async throws -> T
+    #endif  // !hasFeature(Embedded)
 }
 
 /// Convenience helpers and Concurrency-aware variants.
@@ -202,10 +207,12 @@ private struct SQLiteDatabaseCustomLogger<D: SQLiteDatabase>: SQLiteDatabase {
         self.database.withConnection(closure)
     }
     #endif  // canImport(NIOCore)
+    #if !hasFeature(Embedded)
     // See `SQLiteDatabase.withConnection(_:)`.
     func withConnection<T: Sendable>(_ closure: @escaping @Sendable (SQLiteConnection) async throws -> T) async throws -> T {
         try await self.database.withConnection(closure)
     }
+    #endif
     
     #if canImport(NIOCore)
     // See `SQLiteDatabase.query(_:_:_:)`.
