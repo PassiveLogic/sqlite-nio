@@ -5,12 +5,6 @@
 @_documentation(visibility: internal) @_exported import protocol NIOCore.EventLoopGroup
 @_documentation(visibility: internal) @_exported import class NIOPosix.MultiThreadedEventLoopGroup
 #else  // !canImport(NIOCore)
-#if canImport(FoundationEssentials)
-import FoundationEssentials
-#else
-import Foundation
-#endif
-
 /// `BLOB` values are carried by `[UInt8]` on platforms where SwiftNIO is not available.
 ///
 /// SwiftNIO does not support `wasm32-unknown-wasip1`, so `NIOCore.ByteBuffer` cannot be re-exported
@@ -29,10 +23,6 @@ extension ByteBuffer {
         self.init(bytes)
     }
 
-    init(data: Data) {
-        self.init(data)
-    }
-
     var readableBytes: Int {
         self.count
     }
@@ -45,6 +35,21 @@ extension ByteBuffer {
         try self.withUnsafeBytes(body)
     }
 }
+
+// The `Data` bridge needs a Foundation flavor, and Embedded Swift has neither.
+#if canImport(FoundationEssentials) || canImport(Foundation)
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
+import Foundation
+#endif
+
+extension ByteBuffer {
+    init(data: Data) {
+        self.init(data)
+    }
+}
+#endif  // canImport(FoundationEssentials) || canImport(Foundation)
 
 /// A single-threaded stand-in for `NIOConcurrencyHelpers.NIOLockedValueBox`.
 ///
