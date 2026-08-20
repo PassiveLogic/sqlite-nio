@@ -10,15 +10,21 @@ extension SQLiteConnection {
     ///
     /// - Parameter script: `;`-separated SQL statements, split and executed in
     ///   order by SQLite's own parser. Any result rows are discarded. Execution
-    ///   stops at the first error; earlier statements stay applied unless the
-    ///   script itself uses a transaction.
+    ///   stops at the first error and does not undo statements that already ran.
+    ///   If the script opened a transaction, statements after the error,
+    ///   including `COMMIT` or `ROLLBACK`, are not executed. The transaction may
+    ///   therefore remain open; the caller must roll it back or close the
+    ///   connection before retrying.
     /// - Returns: A future that succeeds once every statement has run.
     public func executeScript(_ script: String) -> EventLoopFuture<Void> {
         self.threadPool.runIfActive(eventLoop: self.eventLoop) {
             guard let handle = self.handle.raw else {
                 throw SQLiteError(reason: .misuse, message: "executeScript called on a closed connection")
             }
-            self.logger.debug("executing SQL script (\(script.utf8.count) bytes)")
+            self.logger.trace(
+                "Executing SQL script",
+                metadata: ["bytes": .stringConvertible(script.utf8.count)]
+            )
             var errorPointer: UnsafeMutablePointer<CChar>? = nil
             let status = sqlite_nio_sqlite3_exec(handle, script, nil, nil, &errorPointer)
             let message: String
@@ -33,5 +39,10 @@ extension SQLiteConnection {
                 throw SQLiteError(reason: .init(statusCode: status), message: message)
             }
         }
+    }
+
+    /// Concurrency-aware variant of the future-based `executeScript(_:)`.
+    public func executeScript(_ script: String) async throws {
+        try await self.executeScript(script).get()
     }
 }
