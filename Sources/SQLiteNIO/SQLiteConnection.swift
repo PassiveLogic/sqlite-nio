@@ -212,7 +212,11 @@ public final class SQLiteConnection: SQLiteDatabase, Sendable {
             throw SQLiteError(reason: .init(statusCode: openRet), message: "Failed to open to SQLite database at \(path)")
         }
         
+        #if os(WASI)
+        let busyRet = sqlite_nio_sqlite3_busy_timeout(handle, 0)
+        #else
         let busyRet = sqlite_nio_sqlite3_busy_handler(handle, { _, _ in 1 }, nil)
+        #endif
         guard busyRet == SQLITE_OK else {
             sqlite_nio_sqlite3_close(handle)
             throw SQLiteError(reason: .init(statusCode: busyRet), message: "Failed to set busy handler for SQLite database at \(path)")

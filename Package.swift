@@ -38,6 +38,7 @@ let package = Package(
         ),
         .target(
             name: "VaporCSQLite",
+            exclude: ["sqlite_nio_sqlite3.c"],
             cSettings: sqliteCSettings
         ),
         .target(
