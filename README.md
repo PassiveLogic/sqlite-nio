@@ -32,3 +32,23 @@ SQLiteNIO supports all platforms on which NIO itself works. At the time of this 
 - macOS 10.15+
 - iOS 13+
 - tvOS 13+ and watchOS 7+ (experimental)
+
+### Swift 6.4 Wasm builds
+
+Use SwiftPM's native build system when cross-compiling with Swift 6.4 and its
+matching Wasm SDK:
+
+```sh
+swift build --swift-sdk swift-6.4.0-RELEASE_wasm --build-system native
+```
+
+With SwiftNIO 2.103.0, Swift 6.4's default build system includes `NIOPosix` in the
+Wasm build despite the platform-conditional dependencies, then fails on missing
+socket types. The same dependency resolution builds with `--build-system native`.
+CI selects this build system through the shared workflow's `extra_flags` input,
+which also applies to its native test jobs; the existing import and Sendable
+checks remain enabled.
+
+This is a temporary build-system workaround, not a SQLite runtime change. Swift
+6.4 deprecates the `native` option, so remove the override once the default build
+system correctly handles this dependency graph. The Wasm check remains enabled.
