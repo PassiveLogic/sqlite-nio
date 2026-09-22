@@ -1,14 +1,15 @@
-<p align="center">
+<div align="center">
 <img src="https://design.vapor.codes/images/vapor-sqlitenio.svg" height="96" alt="SQLiteNIO">
 <br>
-<br>
-<a href="https://docs.vapor.codes/4.0/"><img src="https://design.vapor.codes/images/readthedocs.svg" alt="Documentation"></a>
-<a href="https://discord.gg/vapor"><img src="https://design.vapor.codes/images/discordchat.svg" alt="Team Chat"></a>
-<a href="LICENSE"><img src="https://design.vapor.codes/images/mitlicense.svg" alt="MIT License"></a>
-<a href="https://github.com/vapor/sqlite-nio/actions/workflows/test.yml"><img src="https://img.shields.io/github/actions/workflow/status/vapor/sqlite-nio/test.yml?event=push&style=plastic&logo=github&label=tests&logoColor=%23ccc" alt="Continuous Integration"></a>
-<a href="https://codecov.io/github/vapor/sqlite-nio"><img src="https://img.shields.io/codecov/c/github/vapor/sqlite-nio?style=plastic&logo=codecov&label=codecov"></a>
-<a href="https://swift.org"><img src="https://design.vapor.codes/images/swift510up.svg" alt="Swift 5.10+"></a>
-</p>
+
+[![Documentation](https://design.vapor.codes/images/readthedocs.svg)](https://docs.vapor.codes/4.0/)
+[![Team Chat](https://design.vapor.codes/images/discordchat.svg)](https://discord.gg/vapor)
+[![MIT License](https://design.vapor.codes/images/mitlicense.svg)](./LICENSE)
+[![Continuous Integration](https://img.shields.io/github/actions/workflow/status/vapor/sqlite-nio/test.yml?event=push&style=plastic&logo=github&label=tests&logoColor=ccc)](https://github.com/vapor/sqlite-nio/actions/workflows/test.yml)
+[![Code Coverage](https://img.shields.io/codecov/c/github/vapor/sqlite-nio?style=plastic&logo=codecov&label=codecov)](https://codecov.io/github/vapor/sqlite-nio)
+[![Swift 6.1+](https://design.vapor.codes/images/swift61up.svg)](https://swift.org)
+
+</div>
 
 <br>
 
@@ -32,3 +33,40 @@ SQLiteNIO supports all platforms on which NIO itself works. At the time of this 
 - macOS 10.15+
 - iOS 13+
 - tvOS 13+ and watchOS 7+ (experimental)
+
+## PassiveLogic fork
+
+This fork incorporates upstream SQLiteNIO 1.13.0 while retaining WASI support
+through `NIOAsyncRuntime` and the `executeScript` API. It requires Swift 6.1 or
+newer. WASI uses single-threaded SQLite; native platforms retain threaded SQLite
+and `NIOPosix`. Both query and script async overloads use the direct async
+thread-pool path instead of bridging through `EventLoopFuture.get()`.
+
+The upstream synchronization includes its guarded SQLite initialization and
+its narrowly scoped `columnName()` Thread Sanitizer annotation. It does not
+disable sanitizer coverage for the library or the test suite.
+
+Upstream adds async `query` and `withConnection` protocol requirements with
+default implementations. The API checker reports these additions, so the
+dedicated API job allows only those two diagnostics. A future-only legacy
+conformer test exercises both async defaults. Other API changes remain checked;
+this is a source-compatibility check, not a binary ABI compatibility guarantee.
+
+### Wasm and CI
+
+With Swift 6.4.0 and its matching SDK installed:
+
+```sh
+swift build --swift-sdk swift-6.4.0-RELEASE_wasm --build-system native
+```
+
+Swift 6.4's default build system can include transitive native-only dependencies
+in a Wasm build. CI uses the native build-system override only in the dedicated
+Wasm job; native checks retain their defaults. The option is deprecated, so
+verify the [SwiftPM 6.4.x platform-condition fix](https://github.com/swiftlang/swift-package-manager/pull/10556)
+with a released toolchain before removing the override.
+
+Android CI keeps its Swift 6.2/6.3 matrix and cold-boots emulators with
+`-no-snapshot`, avoiding the snapshot-startup failure encountered before tests
+could run. These CI settings match the separate Wasm-integration PR; the
+upstream SQLite Wasm C helpers are not part of this synchronization.

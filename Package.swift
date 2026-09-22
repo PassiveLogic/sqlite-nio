@@ -1,8 +1,6 @@
-// swift-tools-version:5.10
+// swift-tools-version:6.1
 import PackageDescription
 
-/// This list matches the [supported platforms on the Swift 5.10 release of SPM](https://github.com/swiftlang/swift-package-manager/blob/release/5.10/Sources/PackageDescription/SupportedPlatforms.swift#L34-L71)
-/// Don't add new platforms here unless raising the swift-tools-version of this manifest.
 let allPlatforms: [Platform] = [.macOS, .macCatalyst, .iOS, .tvOS, .watchOS, .visionOS, .driverKit, .linux, .windows, .android, .wasi, .openbsd]
 let nonWASIPlatforms: [Platform] = allPlatforms.filter { $0 != .wasi }
 let wasiPlatform: [Platform] = [.wasi]
@@ -19,10 +17,9 @@ let package = Package(
         .library(name: "SQLiteNIO", targets: ["SQLiteNIO"]),
     ],
     dependencies: [
-        // WASM: upstream swift-nio (NIOCore is wasm-safe) + standalone NIOAsyncRuntime for wasi.
-        .package(url: "https://github.com/apple/swift-nio.git", from: "2.97.1"),
+        .package(url: "https://github.com/apple/swift-nio.git", from: "2.101.3"),
         .package(url: "https://github.com/PassiveLogic/nio-async-runtime.git", from: "1.0.0"),
-        .package(url: "https://github.com/apple/swift-log.git", from: "1.11.0"),
+        .package(url: "https://github.com/apple/swift-log.git", from: "1.14.0"),
     ],
     targets: [
         .plugin(
@@ -34,7 +31,7 @@ let package = Package(
                     .writeToPackageDirectory(reason: "Update the vendored SQLite files"),
                 ]
             ),
-            exclude: ["001-warnings-and-data-race.patch"]
+            exclude: ["001-warnings-and-data-race.patch", "002-tsan-false-positives.patch"]
         ),
         .target(
             name: "VaporCSQLite",
@@ -48,7 +45,9 @@ let package = Package(
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOAsyncRuntime", package: "nio-async-runtime", condition: .when(platforms: wasiPlatform)),
                 .product(name: "NIOPosix", package: "swift-nio", condition: .when(platforms: nonWASIPlatforms)),
-                .product(name: "NIOFoundationCompat", package: "swift-nio"),
+                .product(name: "NIOFoundationCompat", package: "swift-nio",
+                         condition: .when(platforms: [.macOS, .iOS, .tvOS, .watchOS, .macCatalyst, .visionOS])),
+                .product(name: "NIOFoundationEssentialsCompat", package: "swift-nio"),
             ],
             swiftSettings: swiftSettings
         ),
@@ -64,10 +63,11 @@ let package = Package(
 
 var swiftSettings: [SwiftSetting] { [
     .enableUpcomingFeature("ExistentialAny"),
-    .enableUpcomingFeature("ConciseMagicFile"),
-    .enableUpcomingFeature("ForwardTrailingClosures"),
-    .enableUpcomingFeature("DisableOutwardActorInference"),
-    .enableExperimentalFeature("StrictConcurrency=complete"),
+    // .enableUpcomingFeature("InternalImportsByDefault"),
+    .enableUpcomingFeature("MemberImportVisibility"),
+    .enableUpcomingFeature("InferIsolatedConformances"),
+    // .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
+    .enableUpcomingFeature("ImmutableWeakCaptures"),
 ] }
 
 var sqliteCSettings: [CSetting] { [

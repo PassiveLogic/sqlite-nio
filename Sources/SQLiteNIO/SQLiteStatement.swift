@@ -16,7 +16,7 @@ struct SQLiteStatement {
             &self.handle,
             nil
         )
-        // Can't use self.check() here, there's nohting to finalize yet on failure.
+        // Can't use self.check() here, there's nothing to finalize yet on failure.
         guard ret == SQLITE_OK else {
             throw SQLiteError(statusCode: ret, connection: connection)
         }
@@ -94,7 +94,7 @@ struct SQLiteStatement {
         case SQLITE_INTEGER:
             return .integer(.init(sqlite_nio_sqlite3_column_int64(self.handle, offset)))
         case SQLITE_FLOAT:
-            return .float(Double(sqlite_nio_sqlite3_column_double(self.handle, offset)))
+            return .float(.init(sqlite_nio_sqlite3_column_double(self.handle, offset)))
         case SQLITE_TEXT:
             guard let val = sqlite_nio_sqlite3_column_text(self.handle, offset) else {
                 throw SQLiteError(reason: .error, message: "Unexpected nil column text")

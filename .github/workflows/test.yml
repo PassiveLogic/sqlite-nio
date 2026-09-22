@@ -40,10 +40,78 @@ jobs:
     secrets: inherit
     with:
       with_release_mode_testing: true
+      with_api_check: false
       ios_scheme_name: sqlite-nio
       with_musl: true
-      with_android: true
-      with_wasm: true
+
+  api-breakage:
+    if: ${{ github.event_name == 'pull_request' && !(github.event.pull_request.draft || false) }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    container: swift:6.4.0-noble
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+        with: { fetch-depth: 0 }
+      - name: Check API against the target branch
+        env:
+          GIT_CONFIG_COUNT: '1'
+          GIT_CONFIG_KEY_0: safe.directory
+          GIT_CONFIG_VALUE_0: ${{ github.workspace }}
+        run: >-
+          swift package diagnose-api-breaking-changes
+          --breakage-allowlist-path .api-breakage-allowlist
+          "origin/${GITHUB_BASE_REF}"
+
+  android-unit:
+    if: ${{ !(github.event.pull_request.draft || false) }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        swift-version: ['6.2', '6.3']
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Ensure zstd is available
+        run: sudo apt-get update -yq && sudo apt-get install -yq zstd
+      - name: Check out code
+        uses: actions/checkout@v7
+      - name: Check Swift compatibility
+        id: swift-check
+        uses: vapor/ci/.github/actions/check-compatible-swift@15f8aff92cac6deb62a9f5891606a3167d76df28
+        with: { assume_installed_version: '${{ matrix.swift-version }}' }
+      - name: Run unit tests with a cold-booted emulator
+        if: steps.swift-check.outputs.swift-compatible == 'true'
+        uses: skiptools/swift-android-action@2044b79660f201ccef8cbce62877e4ec5409f9c8
+        with:
+          swift-version: ${{ matrix.swift-version }}
+          free-disk-space: true
+          android-emulator-options: '-no-window -noaudio -no-boot-anim -no-snapshot'
+
+  wasm:
+    if: ${{ !(github.event.pull_request.draft || false) }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    container: swift:6.4.0-noble
+    timeout-minutes: 15
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+      - name: Install matching Wasm SDK
+        run: >-
+          swift sdk install
+          https://download.swift.org/swift-6.4.0-release/wasm-sdk/swift-6.4.0-RELEASE/swift-6.4.0-RELEASE_wasm.artifactbundle.tar.gz
+          --checksum f07b7be3c586d92d7a07051fc6d303b87ebea67eadc40640ba59d5a8b79aa86d
+      - name: Build with platform-conditional dependencies
+        run: >-
+          swift build --swift-sdk swift-6.4.0-RELEASE_wasm
+          --build-system native
+          --explicit-target-dependency-import-check error
+          -Xswiftc -require-explicit-sendable
 
   submit-dependencies:
     permissions:

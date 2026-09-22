@@ -1,0 +1,2 @@
+API breakage: func SQLiteDatabase.query(_:_:_:) has been added as a protocol requirement
+API breakage: func SQLiteDatabase.withConnection(_:) has been added as a protocol requirement
