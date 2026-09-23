@@ -19,10 +19,6 @@ struct VendorSQLite: CommandPlugin {
     static let sqliteURL = URL(string: "https://sqlite.org")!
     static let vendorPrefix = "sqlite_nio"
     
-    nonisolated(unsafe) static var verbose = false
-
-    var verbose: Bool { Self.verbose }
-    
     func performCommand(context: PluginContext, arguments: [String]) async throws {
         var extractor = UsefulArgumentExtractor(arguments)
         
@@ -32,7 +28,7 @@ struct VendorSQLite: CommandPlugin {
         }
         
         let force = extractor.extractFlag(named: "force") > 0
-        Self.verbose = extractor.extractFlag(named: "verbose", shortForm: "v") > 0
+        let verbose = extractor.extractFlag(named: "verbose", shortForm: "v") > 0
 
         guard extractor.remainingArguments.isEmpty else {
             for f in extractor.unextractedOptionsOrFlags { Diagnostics.error("Unknown option '\(f)'.") }
@@ -51,7 +47,7 @@ struct VendorSQLite: CommandPlugin {
         guard let target = try context.package.targets(named: ["VaporCSQLite"]).first.flatMap({ $0 as? ClangSourceModuleTarget }) else {
             throw VendoringError("Unable to find the VaporCSQLite target in package.")
         }
-        if self.verbose { Diagnostics.progress("Found VaporCSQLite target with path \(target.directoryURL.path(percentEncoded: false))") }
+        if verbose { Diagnostics.progress("Found VaporCSQLite target with path \(target.directoryURL.path(percentEncoded: false))") }
 
         // Load current version
         guard let line = try await target.directoryURL.appending(component: "version.txt").lines.first(where: { !$0.starts(with: "//") }),
@@ -59,7 +55,7 @@ struct VendorSQLite: CommandPlugin {
         else {
             throw VendoringError("Could not read version stamp.")
         }
-        if self.verbose { Diagnostics.progress("Current version: \(currentVersion)") }
+        if verbose { Diagnostics.progress("Current version: \(currentVersion)") }
         
         // Check for new versions
         let latestData = try await self.getLatestDownloadInfo()
@@ -70,13 +66,13 @@ struct VendorSQLite: CommandPlugin {
         guard force || latestData.version > currentVersion else {
             throw VendoringError("Latest version \(latestData.version) is not newer than current \(currentVersion)")
         }
-        if self.verbose { Diagnostics.progress("Found valid update: \(latestData.version)") }
+        if verbose { Diagnostics.progress("Found valid update: \(latestData.version)") }
         
         // Retrieve new sources, unzip, apply patches, replace current sources.
-        try await self.downloadUnpackPatch(latestData, context: context, target: target)
+        try await self.downloadUnpackPatch(latestData, context: context, target: target, verbose: verbose)
         
         // Extract symbol graph from new sources.
-        let symbols = try await self.extractSymbols(for: target, context: context)
+        let symbols = try await self.extractSymbols(for: target, context: context, verbose: verbose)
 
         // MARK: Prefix the symbols in the new sources.
         try await self.prefixFile(
@@ -132,12 +128,13 @@ struct VendorSQLite: CommandPlugin {
     private func downloadUnpackPatch(
         _ latestData: Sqlite3ProductInfo,
         context: PluginContext,
-        target: ClangSourceModuleTarget
+        target: ClangSourceModuleTarget,
+        verbose: Bool
     ) async throws {
         let zipURL = context.pluginWorkDirectoryURL.appending(component: latestData.filename)
 
-        if self.verbose { Diagnostics.progress("Starting download from \(latestData.downloadURL.absoluteString)") }
-        try Process.run("curl", "-f\(self.verbose ? "" : "sS")Lo", "\(zipURL.path(percentEncoded: false))", latestData.downloadURL.absoluteString)
+        if verbose { Diagnostics.progress("Starting download from \(latestData.downloadURL.absoluteString)") }
+        try Process.run("curl", "-f\(verbose ? "" : "sS")Lo", "\(zipURL.path(percentEncoded: false))", latestData.downloadURL.absoluteString)
 
         let zipSize = try zipURL.resourceValues(forKeys: [.fileSizeKey]).fileSize
         guard zipSize == latestData.sizeInBytes else {
@@ -149,9 +146,9 @@ struct VendorSQLite: CommandPlugin {
             throw VendoringError("Download \(zipURL.path(percentEncoded: false)) has wrong hash (expected \(latestData.sha3Hash), got \(sha3Hash))")
         }
 
-        try Process.run("unzip", "-\(self.verbose ? "" : "q")j", "-d", "\(context.pluginWorkDirectoryURL.path(percentEncoded: false))", "\(zipURL.path(percentEncoded: false))")
-        try Process.run("patch", "-\(self.verbose ? "" : "s")d", "\(context.pluginWorkDirectoryURL.path(percentEncoded: false))", "-p1", "-u", "-i", "\(URL(filePath: #filePath).deletingLastPathComponent().appending(component: "001-warnings-and-data-race.patch"))")
-        try Process.run("patch", "-\(self.verbose ? "" : "s")d", "\(context.pluginWorkDirectoryURL.path(percentEncoded: false))", "-p1", "-u", "-i", "\(URL(filePath: #filePath).deletingLastPathComponent().appending(component: "002-tsan-false-positives.patch"))")
+        try Process.run("unzip", "-\(verbose ? "" : "q")j", "-d", "\(context.pluginWorkDirectoryURL.path(percentEncoded: false))", "\(zipURL.path(percentEncoded: false))")
+        try Process.run("patch", "-\(verbose ? "" : "s")d", "\(context.pluginWorkDirectoryURL.path(percentEncoded: false))", "-p1", "-u", "-i", "\(URL(filePath: #filePath).deletingLastPathComponent().appending(component: "001-warnings-and-data-race.patch"))")
+        try Process.run("patch", "-\(verbose ? "" : "s")d", "\(context.pluginWorkDirectoryURL.path(percentEncoded: false))", "-p1", "-u", "-i", "\(URL(filePath: #filePath).deletingLastPathComponent().appending(component: "002-tsan-false-positives.patch"))")
 
         try FileManager.default.replaceItem(
             at: target.publicHeadersDirectoryURL!.appending(component: "\(Self.vendorPrefix)_sqlite3.h"),
@@ -165,9 +162,9 @@ struct VendorSQLite: CommandPlugin {
         )
     }
 
-    private func extractSymbols(for target: any PackagePlugin.SourceModuleTarget, context: PluginContext) async throws -> [Substring] {
+    private func extractSymbols(for target: any PackagePlugin.SourceModuleTarget, context: PluginContext, verbose: Bool) async throws -> [Substring] {
         // Get a list of relevant symbols from the SPM symbol graph.
-        if self.verbose { Diagnostics.progress("Starting symbol graph generation") }
+        if verbose { Diagnostics.progress("Starting symbol graph generation") }
         let symbolGraphFile = try self.packageManager.getSymbolGraph(for: target, options: .init(
             minimumAccessLevel: .public, includeSynthesized: false, includeSPI: false, emitExtensionBlocks: false
         )).directoryURL.appending(component: "\(target.name).symbols.json")
@@ -180,12 +177,12 @@ struct VendorSQLite: CommandPlugin {
                 $0.identifier.precise.dropFirst("c:@".count) :
             nil))
         })
-        if self.verbose { Diagnostics.progress("Found \(graphSymbols.count) symbols in the graph") }
+        if verbose { Diagnostics.progress("Found \(graphSymbols.count) symbols in the graph") }
         
         // The symbol graph can only handle symbols that ClangImporter is able to import into Swift, which excludes
         // functions that use C variadic args like sqlite3_config(), so use nm to extract a symbol list from the
         // generated object file(s) as well.
-        if self.verbose { Diagnostics.progress("Starting object file generation") }
+        if verbose { Diagnostics.progress("Starting object file generation") }
         guard try self.packageManager.build(.target(target.name), parameters: .init()).succeeded else {
             throw VendoringError("Build command failed (unspecified reason)")
         }
@@ -197,19 +194,19 @@ struct VendorSQLite: CommandPlugin {
         {
             objSymbols.formUnion(try await Process.popen("nm", "-gUj", object.path).split(separator: "\n").map { $0.dropFirst() })
         }
-        if self.verbose { Diagnostics.progress("Got \(objSymbols.count) symbols from object files")}
+        if verbose { Diagnostics.progress("Got \(objSymbols.count) symbols from object files")}
         
         // It turns out that both the symbol graph and the object files have symbols that the other doesn't, so we
         // take the union of both.
         let allSymbols = graphSymbols.union(objSymbols).sorted()
-        if self.verbose { Diagnostics.progress("Loaded \(allSymbols.count) unique symbols from the graph and objects") }
+        if verbose { Diagnostics.progress("Loaded \(allSymbols.count) unique symbols from the graph and objects") }
         
         // Remove symbols that have a common prefix matching entire shorter symbol names. This both prevents multiple
         // prefixing of symbols and cuts down on the number of replacements we do per input line.
         let commonPrefixSymbols = allSymbols.reduce(into: [Substring]()) { res, sym in
             if res.last.map({ !sym.starts(with: $0) }) ?? true { res.append(sym) }
         }
-        if self.verbose { Diagnostics.progress("\(allSymbols.count - commonPrefixSymbols.count) symbols had common prefixes") }
+        if verbose { Diagnostics.progress("\(allSymbols.count - commonPrefixSymbols.count) symbols had common prefixes") }
         
         return commonPrefixSymbols
     }
@@ -260,4 +257,3 @@ struct VendoringError: Error, ExpressibleByStringLiteral, CustomStringConvertibl
     init(stringLiteral value: String) { self.description = value }
     init(_ description: String) { self.description = description }
 }
-
