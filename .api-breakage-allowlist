@@ -1,2 +1,17 @@
 API breakage: func SQLiteDatabase.query(_:_:_:) has been added as a protocol requirement
 API breakage: func SQLiteDatabase.withConnection(_:) has been added as a protocol requirement
+API breakage: extension String has removed conformance to CVarArg
+API breakage: extension Int has removed conformance to AtomicRepresentable
+API breakage: extension Int8 has removed conformance to AtomicRepresentable
+API breakage: extension Int16 has removed conformance to AtomicRepresentable
+API breakage: extension Int32 has removed conformance to AtomicRepresentable
+API breakage: extension Int64 has removed conformance to AtomicRepresentable
+API breakage: extension UInt has removed conformance to AtomicRepresentable
+API breakage: extension UInt8 has removed conformance to AtomicRepresentable
+API breakage: extension UInt16 has removed conformance to AtomicRepresentable
+API breakage: extension UInt32 has removed conformance to AtomicRepresentable
+API breakage: extension UInt64 has removed conformance to AtomicRepresentable
+API breakage: extension Double has removed conformance to AtomicRepresentable
+API breakage: extension Float has removed conformance to AtomicRepresentable
+API breakage: extension Bool has removed conformance to AtomicRepresentable
+API breakage: extension Date has removed conformance to CustomPlaygroundDisplayConvertible

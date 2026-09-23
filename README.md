@@ -48,9 +48,20 @@ disable sanitizer coverage for the library or the test suite.
 
 Upstream adds async `query` and `withConnection` protocol requirements with
 default implementations. The API checker reports these additions, so the
-dedicated API job allows only those two diagnostics. A future-only legacy
-conformer test exercises both async defaults. Other API changes remain checked;
-this is a source-compatibility check, not a binary ABI compatibility guarantee.
+dedicated API job explicitly allows those two diagnostics. A future-only legacy
+conformer test exercises both async defaults.
+
+On Linux, the upstream FoundationEssentials migration also changes the transitive
+conformance surface. The allowlist records the exact external diagnostics:
+`String: CVarArg` and `Date: CustomPlaygroundDisplayConvertible` belong to
+Foundation; the scalar `AtomicRepresentable` conformances belong to
+Synchronization. Consumers using those capabilities should explicitly import
+their defining module rather than rely on SQLiteNIO to expose it. Import probes
+exercise these capabilities; the `Date` playground conformance is tested only on
+Linux, where it is available. These are accepted upstream exposure changes, not
+a claim of universally unchanged source or binary ABI compatibility. The API
+check still compares against this fork's target branch; only the listed
+diagnostics are allowed, and unexpected API changes remain checked.
 
 ### Wasm and CI
 
