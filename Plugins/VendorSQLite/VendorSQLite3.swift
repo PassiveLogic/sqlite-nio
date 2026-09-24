@@ -74,6 +74,9 @@ struct VendorSQLite: CommandPlugin {
         
         // Retrieve new sources, unzip, apply patches, replace current sources.
         try await self.downloadUnpackPatch(latestData, context: context, target: target)
+
+        // Retrieve the Wasm helper from the same SQLite check-in as the new sources, apply patches, replace it.
+        try self.downloadPatchWasmHelper(context: context, target: target)
         
         // Extract symbol graph from new sources.
         let symbols = try await self.extractSymbols(for: target, context: context)
@@ -88,6 +91,12 @@ struct VendorSQLite: CommandPlugin {
             at: target.directory.appending("\(Self.vendorPrefix)_sqlite3.c"),
             using: symbols,
             in: context
+        )
+
+        // Map the Wasm helper's standard SQLite API names to the prefixed symbols.
+        try self.writeWasmAliases(
+            from: target.publicHeadersDirectory!.appending("\(Self.vendorPrefix)_sqlite3.h"),
+            to: target.directory.appending("wasm-aliases.h")
         )
         
         // Stamp sources with updated version info.
@@ -163,6 +172,43 @@ struct VendorSQLite: CommandPlugin {
             withItemAt: context.pluginWorkDirectory.appending("sqlite3.c").fileUrl,
             backupItemName: nil, resultingItemURL: nil
         )
+    }
+
+    /// The Wasm helper includes the amalgamation and uses its internals, so it must come from the same check-in.
+    /// Read that check-in from the newly vendored (hash-verified) header rather than trusting a release tag.
+    private func downloadPatchWasmHelper(context: PluginContext, target: ClangSourceModuleTarget) throws {
+        let header = try String(contentsOf: target.publicHeadersDirectory!.appending("\(Self.vendorPrefix)_sqlite3.h").fileUrl, encoding: .utf8)
+        guard let sourceIDLine = header.split(separator: "\n").first(where: { $0.hasPrefix("#define SQLITE_SOURCE_ID") }),
+              let checkIn = sourceIDLine.split(separator: " ").last?.trimmingCharacters(in: ["\""]),
+              checkIn.count == 64, checkIn.allSatisfy(\.isHexDigit)
+        else {
+            throw VendoringError("Could not read the SQLite check-in from SQLITE_SOURCE_ID in sqlite3.h.")
+        }
+
+        let helperPath = context.pluginWorkDirectory.appending("sqlite3-wasm.c")
+        let helperURL = Self.sqliteURL.absoluteString + "/src/raw?filename=ext/wasm/api/sqlite3-wasm.c&ci=\(checkIn)"
+
+        if self.verbose { Diagnostics.progress("Starting Wasm helper download from \(helperURL)") }
+        try Process.run("curl", "-f\(self.verbose ? "" : "sS")Lo", "\(helperPath)", helperURL)
+        try Process.run("patch", "-\(self.verbose ? "" : "s")d", "\(context.pluginWorkDirectory)", "-p1", "-u", "-i", "\(Path(#filePath).replacingLastComponent(with: "002-wasm-helper.patch"))")
+
+        try FileManager.default.replaceItem(
+            at: target.directory.appending("sqlite3-wasm.c").fileUrl,
+            withItemAt: helperPath.fileUrl,
+            backupItemName: nil, resultingItemURL: nil
+        )
+    }
+
+    /// Write one `#define sqlite3_x sqlite_nio_sqlite3_x` for each prefixed identifier in the public header.
+    private func writeWasmAliases(from header: Path, to output: Path) throws {
+        let prefix = "\(Self.vendorPrefix)_"
+        let identifiers = try String(contentsOf: header.fileUrl, encoding: .utf8)
+            .split(whereSeparator: { !($0.isASCII && ($0.isLetter || $0.isNumber || $0 == "_")) })
+        let names = Set(identifiers.filter { $0.hasPrefix(prefix) }.map { $0.dropFirst(prefix.count) }).sorted()
+
+        Diagnostics.progress("Writing \(names.count) Wasm aliases to \(output.lastComponent)...")
+        try names.map { "#define \($0) \(prefix)\($0)\n" }.joined()
+            .write(to: output.fileUrl, atomically: true, encoding: .utf8)
     }
 
     private func extractSymbols(for target: any PackagePlugin.SourceModuleTarget, context: PluginContext) async throws -> [Substring] {

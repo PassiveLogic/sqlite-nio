@@ -34,10 +34,11 @@ let package = Package(
                     .writeToPackageDirectory(reason: "Update the vendored SQLite files"),
                 ]
             ),
-            exclude: ["001-warnings-and-data-race.patch"]
+            exclude: ["001-warnings-and-data-race.patch", "002-wasm-helper.patch"]
         ),
         .target(
             name: "VaporCSQLite",
+            exclude: ["sqlite_nio_sqlite3.c"],
             cSettings: sqliteCSettings
         ),
         .target(
