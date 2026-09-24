@@ -408,7 +408,7 @@ extension SQLiteConnection {
         logger: Logger = .init(label: "codes.vapor.sqlite"),
         on eventLoop: any EventLoop
     ) async throws -> SQLiteConnection {
-        try await threadPool.runIfActive {
+        try await threadPool.runSQLite {
             try self.openInternal(storage: storage, threadPool: threadPool, logger: logger, eventLoop: eventLoop)
         }
     }
@@ -420,7 +420,7 @@ extension SQLiteConnection {
     ///
     /// - Returns: The most recently inserted rowid value.
     public func lastAutoincrementID() async throws -> Int {
-        try await self.threadPool.runIfActive {
+        try await self.threadPool.runSQLite {
             numericCast(sqlite_nio_sqlite3_last_insert_rowid(self.handle.raw))
         }
     }
@@ -438,7 +438,7 @@ extension SQLiteConnection {
         _ binds: [SQLiteData],
         _ onRow: @escaping @Sendable (SQLiteRow) -> Void
     ) async throws {
-        try await self.threadPool.runIfActive {
+        try await self.threadPool.runSQLite {
             var statement = try SQLiteStatement(query: query, on: self)
             let columns = try statement.columns()
             try statement.bind(binds)
@@ -452,7 +452,7 @@ extension SQLiteConnection {
     /// 
     /// No further operations may be performed on the connection after calling this method.
     public func close() async throws {
-        try await self.threadPool.runIfActive {
+        try await self.threadPool.runSQLite {
             self.clearAllHooks()
             sqlite_nio_sqlite3_close(self.handle.raw)
             self.handle.raw = nil
@@ -463,7 +463,7 @@ extension SQLiteConnection {
     ///
     /// - Parameter customFunction: The function to install.
     public func install(customFunction: SQLiteCustomFunction) async throws {
-        try await self.threadPool.runIfActive {
+        try await self.threadPool.runSQLite {
             self.logger.trace("Adding custom function \(customFunction.name)")
             try customFunction.install(in: self)
         }
@@ -473,9 +473,21 @@ extension SQLiteConnection {
     ///
     /// - Parameter customFunction: The function to remove.
     public func uninstall(customFunction: SQLiteCustomFunction) async throws {
-        try await self.threadPool.runIfActive {
+        try await self.threadPool.runSQLite {
             self.logger.trace("Removing custom function \(customFunction.name)")
             try customFunction.uninstall(in: self)
         }
+    }
+}
+
+extension NIOThreadPool {
+    /// Publishes thread-pool results through an explicit lock before the caller accesses them.
+    func runSQLite<Value: Sendable>(_ body: @escaping @Sendable () throws -> Value) async throws -> Value {
+        let result = NIOLockedValueBox<Result<Value, any Error>?>(nil)
+        try await self.runIfActive {
+            let value = Result(catching: body)
+            result.withLockedValue { $0 = value }
+        }
+        return try result.withLockedValue { try $0!.get() }
     }
 }

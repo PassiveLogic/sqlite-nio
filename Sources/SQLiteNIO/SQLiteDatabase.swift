@@ -1,4 +1,5 @@
 import NIOCore
+import NIOConcurrencyHelpers
 import VaporCSQLite
 import Logging
 
@@ -114,18 +115,22 @@ extension SQLiteDatabase {
 
     /// Wrapper for ``query(_:_:_:)`` which returns the result rows (if any) rather than calling a closure.
     public func query(_ query: String, _ binds: [SQLiteData] = []) -> EventLoopFuture<[SQLiteRow]> {
-        nonisolated(unsafe) var rows: [SQLiteRow] = []
+        let rows = NIOLockedValueBox<[SQLiteRow]>([])
         
-        return self.query(query, binds, logger: self.logger) { rows.append($0) }.map { rows }
+        return self.query(query, binds, logger: self.logger) { row in
+            rows.withLockedValue { $0.append(row) }
+        }.map { rows.withLockedValue { $0 } }
     }
     
     /// Wrapper for ``query(_:_:_:)`` which returns the result rows (if any) rather than calling a
     /// closure (async version).
     public func query(_ query: String, _ binds: [SQLiteData] = []) async throws -> [SQLiteRow] {
-        nonisolated(unsafe) var rows: [SQLiteRow] = []
+        let rows = NIOLockedValueBox<[SQLiteRow]>([])
 
-        try await self.query(query, binds) { rows.append($0) }
-        return rows
+        try await self.query(query, binds) { row in
+            rows.withLockedValue { $0.append(row) }
+        }
+        return rows.withLockedValue { $0 }
     }
 
     /// Async version of ``withConnection(_:)-48y34``.

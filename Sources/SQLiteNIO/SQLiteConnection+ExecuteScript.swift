@@ -25,7 +25,7 @@ extension SQLiteConnection {
 
     /// Concurrency-aware variant of the future-based `executeScript(_:)`.
     public func executeScript(_ script: String) async throws {
-        try await self.threadPool.runIfActive {
+        try await self.threadPool.runSQLite {
             try self.executeScriptSynchronously(script)
         }
     }
