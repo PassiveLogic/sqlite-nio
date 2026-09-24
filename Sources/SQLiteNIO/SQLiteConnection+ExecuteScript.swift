@@ -1,4 +1,5 @@
 import NIOCore
+import Logging
 import VaporCSQLite
 
 extension SQLiteConnection {
@@ -18,31 +19,36 @@ extension SQLiteConnection {
     /// - Returns: A future that succeeds once every statement has run.
     public func executeScript(_ script: String) -> EventLoopFuture<Void> {
         self.threadPool.runIfActive(eventLoop: self.eventLoop) {
-            guard let handle = self.handle.raw else {
-                throw SQLiteError(reason: .misuse, message: "executeScript called on a closed connection")
-            }
-            self.logger.trace(
-                "Executing SQL script",
-                metadata: ["bytes": .stringConvertible(script.utf8.count)]
-            )
-            var errorPointer: UnsafeMutablePointer<CChar>? = nil
-            let status = sqlite_nio_sqlite3_exec(handle, script, nil, nil, &errorPointer)
-            let message: String
-            if let errorPointer {
-                message = String(cString: errorPointer)
-                sqlite_nio_sqlite3_free(errorPointer)
-            }
-            else {
-                message = "Unknown"
-            }
-            guard status == SQLITE_OK else {
-                throw SQLiteError(reason: .init(statusCode: status), message: message)
-            }
+            try self.executeScriptSynchronously(script)
         }
     }
 
     /// Concurrency-aware variant of the future-based `executeScript(_:)`.
     public func executeScript(_ script: String) async throws {
-        try await self.executeScript(script).get()
+        try await self.threadPool.runSQLite {
+            try self.executeScriptSynchronously(script)
+        }
+    }
+
+    private func executeScriptSynchronously(_ script: String) throws {
+        guard let handle = self.handle.raw else {
+            throw SQLiteError(reason: .misuse, message: "executeScript called on a closed connection")
+        }
+        self.logger.trace(
+            "Executing SQL script",
+            metadata: ["bytes": .stringConvertible(script.utf8.count)]
+        )
+        var errorPointer: UnsafeMutablePointer<CChar>? = nil
+        let status = sqlite_nio_sqlite3_exec(handle, script, nil, nil, &errorPointer)
+        let message: String
+        if let errorPointer {
+            message = String(cString: errorPointer)
+            sqlite_nio_sqlite3_free(errorPointer)
+        } else {
+            message = "Unknown"
+        }
+        guard status == SQLITE_OK else {
+            throw SQLiteError(reason: .init(statusCode: status), message: message)
+        }
     }
 }

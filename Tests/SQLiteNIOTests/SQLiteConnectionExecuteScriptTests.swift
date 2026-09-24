@@ -1,45 +1,71 @@
 import SQLiteNIO
-import XCTest
+import NIOCore
+import Testing
 
-final class SQLiteConnectionExecuteScriptTests: XCTestCase {
-    func testExecuteScriptExecutesEveryStatement() async throws {
+@Suite("SQL script execution")
+struct SQLiteConnectionExecuteScriptTests {
+    @Test(arguments: [false, true])
+    func executeScriptExecutesEveryStatement(useFuture: Bool) async throws {
         try await withOpenedConnection { connection in
-            let _: Void = try await connection.executeScript(
+            let script =
                 """
                 CREATE TABLE items(value INTEGER);
                 INSERT INTO items VALUES (1);
                 INSERT INTO items VALUES (2);
                 """
-            )
+            if useFuture {
+                try await connection.executeScript(script).get()
+            } else {
+                try await connection.executeScript(script)
+            }
 
             let rows = try await connection.query("SELECT value FROM items ORDER BY value")
 
-            XCTAssertEqual(rows.compactMap { $0.column("value")?.integer }, [1, 2])
+            #expect(rows.compactMap { $0.column("value")?.integer } == [1, 2])
         }
     }
 
-    func testExecuteScriptStopsAtFirstErrorAndLeavesTransactionOpen() async throws {
+    @Test(arguments: [false, true])
+    func executeScriptStopsAtFirstErrorAndLeavesTransactionOpen(useFuture: Bool) async throws {
         try await withOpenedConnection { connection in
             _ = try await connection.query("CREATE TABLE items(value INTEGER)")
 
-            await XCTAssertThrowsErrorAsync(
-                try await connection.executeScript(
-                    """
-                    BEGIN;
-                    INSERT INTO items VALUES (1);
-                    INSERT INTO missing_table VALUES (2);
-                    COMMIT;
-                    """
-                )
-            )
+            let script =
+                """
+                BEGIN;
+                INSERT INTO items VALUES (1);
+                INSERT INTO missing_table VALUES (2);
+                COMMIT;
+                """
+            await #expect(throws: SQLiteError.self) {
+                if useFuture {
+                    try await connection.executeScript(script).get()
+                } else {
+                    try await connection.executeScript(script)
+                }
+            }
 
             let rowsBeforeRollback = try await connection.query("SELECT value FROM items")
-            XCTAssertEqual(rowsBeforeRollback.first?.column("value")?.integer, 1)
+            #expect(rowsBeforeRollback.first?.column("value")?.integer == 1)
 
             _ = try await connection.query("ROLLBACK")
 
             let rowsAfterRollback = try await connection.query("SELECT value FROM items")
-            XCTAssertTrue(rowsAfterRollback.isEmpty)
+            #expect(rowsAfterRollback.isEmpty)
         }
+    }
+
+    @Test(arguments: [false, true])
+    func executeScriptRejectsClosedConnection(useFuture: Bool) async throws {
+        let connection = try await SQLiteConnection.open(storage: .memory)
+        try await connection.close()
+        let error = await #expect(throws: SQLiteError.self) {
+            if useFuture {
+                try await connection.executeScript("SELECT 1;").get()
+            } else {
+                try await connection.executeScript("SELECT 1;")
+            }
+        }
+        #expect(error?.reason == .misuse)
     }
 }

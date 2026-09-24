@@ -40,8 +40,29 @@ jobs:
     secrets: inherit
     with:
       with_release_mode_testing: true
+      with_api_check: false
       ios_scheme_name: sqlite-nio
       with_musl: true
+
+  api-breakage:
+    if: ${{ github.event_name == 'pull_request' && !(github.event.pull_request.draft || false) }}
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    container: swift:6.4.0-noble
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+        with: { fetch-depth: 0 }
+      - name: Check API against the target branch
+        env:
+          GIT_CONFIG_COUNT: '1'
+          GIT_CONFIG_KEY_0: safe.directory
+          GIT_CONFIG_VALUE_0: ${{ github.workspace }}
+        run: >-
+          swift package diagnose-api-breaking-changes
+          --breakage-allowlist-path .api-breakage-allowlist
+          "origin/${GITHUB_BASE_REF}"
 
   android-unit:
     if: ${{ !(github.event.pull_request.draft || false) }}
