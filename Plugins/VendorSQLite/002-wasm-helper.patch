@@ -1,0 +1,36 @@
+--- a/sqlite3-wasm.c
++++ b/sqlite3-wasm.c
+@@ -1,3 +1,8 @@
++#if defined(__wasi__)
++#define SQLITE_C sqlite_nio_sqlite3.c
++#undef SQLITE_OMIT_COMPLETE
++#undef SQLITE_OMIT_TRACE
++#define SQLITE_TEMP_STORE 3
+ /*
+ ** This file requires access to sqlite3.c static state in order to
+ ** implement certain WASM-specific features, and thus directly
+@@ -263,6 +268,7 @@
+ #undef INC__STRINGIFY_
+ #undef INC__STRINGIFY
+ #undef SQLITE_C
++#include "wasm-aliases.h"
+ 
+ /*
+ ** State for the "pseudo-stack" allocator implemented in
+@@ -979,7 +985,7 @@ SQLITE_WASM_EXPORT2(const char *,sqlite3__wasm_enum_json,(void)){
+ #define StructBinder__(TYPE)                 \
+   n = 0;                                     \
+   outf("%s{", (nStruct++ ? ", " : ""));      \
+-  out("\"name\": \"" # TYPE "\",");          \
++  outf("\"name\": \"%s\",", strncmp(#TYPE, "sqlite_nio_", 11) ? #TYPE : &(#TYPE)[11]); \
+   outf("\"sizeof\": %d", (int)sizeof(TYPE)); \
+   out(",\"members\": {");
+ #define StructBinder_(T) StructBinder__(T)
+@@ -1964,3 +1970,7 @@ SQLITE_WASM_EXPORT2(int,sqlite3__wasm_SQLTester_strglob,
+ #undef SQLITE_WASM_HAS_VTAB
+ #undef SQLITE_WASM_BARE_BONES
+ #undef SQLITE_WASM_ENABLE_C_TESTS
++
++#else
++#include "sqlite_nio_sqlite3.c"
++#endif
