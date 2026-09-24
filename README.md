@@ -63,21 +63,35 @@ a claim of universally unchanged source or binary ABI compatibility. The API
 check still compares against this fork's target branch; only the listed
 diagnostics are allowed, and unexpected API changes remain checked.
 
-### Wasm and CI
+### Swift 6.4 Wasm builds
 
-With Swift 6.4.0 and its matching SDK installed:
+Use SwiftPM's native build system when cross-compiling with Swift 6.4 and its
+matching Wasm SDK:
 
 ```sh
 swift build --swift-sdk swift-6.4.0-RELEASE_wasm --build-system native
 ```
 
-Swift 6.4's default build system can include transitive native-only dependencies
-in a Wasm build. CI uses the native build-system override only in the dedicated
-Wasm job; native checks retain their defaults. The option is deprecated, so
-verify the [SwiftPM 6.4.x platform-condition fix](https://github.com/swiftlang/swift-package-manager/pull/10556)
-with a released toolchain before removing the override.
+With SwiftNIO 2.103.0, Swift 6.4's default build system includes `NIOPosix` in the
+Wasm build despite the platform-conditional dependencies, then fails on missing
+socket types. The same dependency resolution builds with `--build-system native`.
+CI applies this override only in a dedicated Wasm job with a matching compiler
+and checksum-verified SDK. Native jobs keep the shared workflow's default build
+system, and the Wasm job retains the explicit import and Sendable checks.
 
-Android CI keeps its Swift 6.2/6.3 matrix and cold-boots emulators with
-`-no-snapshot`, avoiding the snapshot-startup failure encountered before tests
-could run. These CI settings match the separate Wasm-integration PR; the
-upstream SQLite Wasm C helpers are not part of this synchronization.
+This is a temporary build-system workaround, not a SQLite runtime change. Swift
+6.4 deprecates the `native` option, so remove the override once the default build
+system correctly handles this dependency graph. The Wasm check remains enabled.
+
+SwiftPM's [transitive platform-condition fix](https://github.com/swiftlang/swift-package-manager/pull/10541)
+has a [6.4.x backport](https://github.com/swiftlang/swift-package-manager/pull/10556).
+Before removing the override, verify a toolchain containing that fix builds this
+package with the default system without compiling `NIOPosix` for WASI.
+
+### Android CI emulator startup
+
+Android jobs keep the Swift 6.2/6.3 test matrix and use `-no-snapshot` to cold-boot
+the emulator. Snapshot-restored runs repeatedly failed at `adb shell input
+keyevent 82` with exit 137 before executing the test suite. The dedicated jobs
+expose the emulator option that the shared workflow does not forward. This
+disables snapshot loading/saving, not the action's dependency or AVD caches.
